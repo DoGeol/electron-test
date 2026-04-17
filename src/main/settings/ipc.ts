@@ -1,4 +1,4 @@
-import type { OpenDialogReturnValue } from 'electron';
+import type { BrowserWindow, OpenDialogOptions, OpenDialogReturnValue, WebContents } from 'electron';
 import { IPC_CHANNELS, type UpdateSettingsPayload } from '../../shared/ipc';
 
 type IpcMainLike = {
@@ -12,16 +12,24 @@ type SettingsServiceLike = {
 };
 
 type DialogLike = {
-  showOpenDialog: (options: { properties: Array<'openDirectory' | 'createDirectory'>; title?: string }) => Promise<OpenDialogReturnValue>;
+  showOpenDialog: {
+    (browserWindow: BrowserWindow, options: OpenDialogOptions): Promise<OpenDialogReturnValue>;
+    (options: OpenDialogOptions): Promise<OpenDialogReturnValue>;
+  };
+};
+
+type BrowserWindowStaticLike = {
+  fromWebContents: (webContents: WebContents) => BrowserWindow | null;
 };
 
 type RegisterSettingsIpcHandlersArgs = {
   ipcMain: IpcMainLike;
   settingsService: SettingsServiceLike;
   dialog: DialogLike;
+  browserWindow?: BrowserWindowStaticLike;
 };
 
-export function registerSettingsIpcHandlers({ ipcMain, settingsService, dialog }: RegisterSettingsIpcHandlersArgs): void {
+export function registerSettingsIpcHandlers({ ipcMain, settingsService, dialog, browserWindow }: RegisterSettingsIpcHandlersArgs): void {
   ipcMain.handle(IPC_CHANNELS.settingsGet, () => settingsService.getSettings());
 
   ipcMain.handle(IPC_CHANNELS.settingsUpdate, (_event, payload: unknown) => {
@@ -32,18 +40,20 @@ export function registerSettingsIpcHandlers({ ipcMain, settingsService, dialog }
     settingsService.testApiKey(typeof apiKeyInput === 'string' ? apiKeyInput : undefined)
   );
 
-  ipcMain.handle(IPC_CHANNELS.settingsSelectOutputPath, async () => {
-    const result = await dialog.showOpenDialog({
+  ipcMain.handle(IPC_CHANNELS.settingsSelectOutputPath, async (event) => {
+    const options: OpenDialogOptions = {
       title: '저장 경로 선택',
       properties: ['openDirectory', 'createDirectory'],
-    });
+    };
+    const sender = typeof event === 'object' && event !== null && 'sender' in event ? event.sender : undefined;
+    const parentWindow = sender && browserWindow ? browserWindow.fromWebContents(sender as WebContents) : null;
+    const result = parentWindow ? await dialog.showOpenDialog(parentWindow, options) : await dialog.showOpenDialog(options);
 
     if (result.canceled || result.filePaths.length === 0) {
       return null;
     }
 
     const selectedPath = result.filePaths[0];
-    settingsService.updateSettings({ outputPath: selectedPath });
     return selectedPath;
   });
 }

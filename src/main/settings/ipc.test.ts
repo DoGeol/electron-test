@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import { describe, expect, it, vi } from 'vitest';
+import type { BrowserWindow } from 'electron';
 import { IPC_CHANNELS } from '../../shared/ipc';
 import { registerSettingsIpcHandlers } from './ipc';
 
@@ -22,11 +23,16 @@ describe('registerSettingsIpcHandlers', () => {
     const dialog = {
       showOpenDialog: vi.fn(async () => ({ canceled: false, filePaths: ['/tmp/selected'] })),
     };
+    const parentWindow = {} as BrowserWindow;
+    const browserWindow = {
+      fromWebContents: vi.fn(() => parentWindow),
+    };
 
     registerSettingsIpcHandlers({
       ipcMain,
       settingsService,
       dialog,
+      browserWindow,
     });
 
     expect(handlers.has(IPC_CHANNELS.settingsGet)).toBe(true);
@@ -44,8 +50,44 @@ describe('registerSettingsIpcHandlers', () => {
     expect(testResult).toEqual({ ok: true, message: 'ok' });
     expect(settingsService.testApiKey).toHaveBeenCalledWith('AIza-input');
 
-    const selectedPath = await handlers.get(IPC_CHANNELS.settingsSelectOutputPath)?.();
+    const selectedPath = await handlers.get(IPC_CHANNELS.settingsSelectOutputPath)?.({ sender: {} });
     expect(selectedPath).toBe('/tmp/selected');
-    expect(settingsService.updateSettings).toHaveBeenCalledWith({ outputPath: '/tmp/selected' });
+    expect(browserWindow.fromWebContents).toHaveBeenCalled();
+    expect(dialog.showOpenDialog).toHaveBeenCalledWith(parentWindow, {
+      title: '저장 경로 선택',
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    expect(settingsService.updateSettings).toHaveBeenCalledTimes(1);
+    expect(settingsService.updateSettings).toHaveBeenCalledWith({ promptMarkdown: '## changed' });
+  });
+
+  it('returns null without saving when output path selection is canceled', async () => {
+    const handlers = new Map<string, (...args: unknown[]) => unknown>();
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (...args: unknown[]) => unknown) => {
+        handlers.set(channel, handler);
+      }),
+    };
+    const settingsService = {
+      getSettings: vi.fn(() => ({ apiKeyMasked: '', promptMarkdown: '', outputPath: '' })),
+      updateSettings: vi.fn(),
+      testApiKey: vi.fn(async () => ({ ok: true, message: 'ok' })),
+    };
+
+    registerSettingsIpcHandlers({
+      ipcMain,
+      settingsService,
+      dialog: {
+        showOpenDialog: vi.fn(async () => ({ canceled: true, filePaths: [] })),
+      },
+      browserWindow: {
+        fromWebContents: vi.fn(() => null),
+      },
+    });
+
+    const selectedPath = await handlers.get(IPC_CHANNELS.settingsSelectOutputPath)?.({ sender: {} });
+
+    expect(selectedPath).toBeNull();
+    expect(settingsService.updateSettings).not.toHaveBeenCalled();
   });
 });

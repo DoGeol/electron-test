@@ -115,9 +115,19 @@ export default function App() {
   }, [apiKey, apiKeyDirty, bridge]);
 
   const handleSelectOutputPath = useCallback(async () => {
-    const selectedPath = await bridge.settings.selectOutputPath();
-    if (selectedPath) {
-      setOutputPath(selectedPath);
+    setSettingsNotice('저장 경로 선택 창을 여는 중입니다.');
+
+    try {
+      const selectedPath = await bridge.settings.selectOutputPath();
+      if (selectedPath) {
+        setOutputPath(selectedPath);
+        setSettingsNotice('저장 경로를 선택했습니다. 설정 저장을 눌러 적용해주세요.');
+        return;
+      }
+
+      setSettingsNotice('저장 경로 선택이 취소되었습니다.');
+    } catch {
+      setSettingsNotice('저장 경로 선택 창을 열지 못했습니다.');
     }
   }, [bridge]);
 

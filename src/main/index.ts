@@ -70,6 +70,7 @@ app.whenReady().then(() => {
     ipcMain,
     settingsService,
     dialog,
+    browserWindow: BrowserWindow,
   });
   registerGeneratorIpcHandlers({
     ipcMain,
