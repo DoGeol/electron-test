@@ -8,6 +8,15 @@ Before making UI, UX, styling, layout, or frontend component changes, read and f
 
 Keep implementations aligned with the Octo Code dark-mode-first visual system unless the user explicitly asks for a different direction.
 
+## UI component rule
+
+For renderer UI, prefer composing screens with shadcn-style UI primitives (for example `Button`, `Input`, `Textarea`, `Label`) and adapt them to the `docs/DESIGN.md` token system.
+
+## Language rule
+
+All menu labels, field labels, button text, helper text, and in-app descriptions must use Korean as the default language.
+If a technical term is needed, keep Korean first and optionally add English in parentheses.
+
 ## Frontend skills
 
 When working on React or Next.js UI, layout, styling, or component implementation, consult the relevant project skills before designing or coding the change:

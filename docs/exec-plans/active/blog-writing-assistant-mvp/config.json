@@ -1,0 +1,10 @@
+{
+  "task_slug": "blog-writing-assistant-mvp",
+  "complexity": "full",
+  "mode": "runnable",
+  "runnable": true,
+  "max_iterations": 5,
+  "dev_server_command": "npm run dev",
+  "dev_server_url": "http://localhost:5173",
+  "total_sprints": 9
+}

@@ -24,6 +24,11 @@ Octo Code is a developer-centric design system inspired by the world's largest c
 
 Inter is used at weights 400, 500, and 600 across all non-code UI. Display headings use 600 weight with -0.02em letter-spacing for a tight, engineered feel. Body text sits at 400 weight with default letter-spacing for comfortable reading of issues, comments, and documentation. JetBrains Mono renders all code blocks, inline code, diffs, commit SHAs, and terminal output at 400 weight with ligatures enabled. The type scale is compact to maximize information density: 12px (meta/labels), 14px (body/default), 16px (section titles), 20px (page titles), 24px (repo names), 32px (marketing headings).
 
+## Language
+- UI copy baseline is Korean.
+- Menus, buttons, labels, helper text, empty states, and notices should be written in Korean first.
+- For unavoidable technical terms, keep Korean-first phrasing and optionally add English in parentheses.
+
 ## Elevation
 Elevation is expressed through background color layering rather than shadows. The base layer is #0D1117, cards and panels lift to #161B22, popovers and dropdowns to #1C2128, and modals to #21262D with a semi-transparent backdrop overlay at rgba(1, 4, 9, 0.8). Subtle box-shadows of 0 1px 0 rgba(27, 31, 36, 0.04) are used sparingly on sticky headers and floating action bars. The philosophy is flat and layered — depth comes from color differentiation, not shadow theatrics.
 
