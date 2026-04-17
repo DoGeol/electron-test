@@ -33,9 +33,10 @@ Mac 로컬에서 사용하는 Electron 기반 블로그 글 작성 보조 앱을
 
 - 앱은 단일 사용자 로컬 앱이다.
 - Gemini API Key는 사용자가 직접 발급해서 입력한다.
-- 글 생성 결과는 사용자가 지정한 로컬 폴더에 저장한다.
-- 업로드 이미지는 AI 입력 컨텍스트로 사용하며, 네이버 블로그에 이미지를 자동 업로드하지 않는다.
-- 생성 결과의 원본 저장 포맷은 재편집 가능한 구조를 우선하고, 네이버 복사는 별도 변환 파이프라인으로 처리한다.
+- MVP에서는 Gemini API Key, 프롬프트, 저장 경로를 모두 `electron-store`에 저장한다.
+- 글 생성 결과는 사용자가 지정한 로컬 폴더에 수동 저장한다.
+- 업로드 이미지는 MVP에서 1장만 지원하며 AI 입력 컨텍스트로 사용한다. 네이버 블로그에 이미지를 자동 업로드하지 않는다.
+- 생성 결과의 canonical 원본 포맷은 Markdown으로 고정하고, 네이버 복사는 별도 변환 파이프라인으로 처리한다.
 
 ## 6. Information Architecture
 
@@ -102,7 +103,7 @@ Mac 로컬에서 사용하는 Electron 기반 블로그 글 작성 보조 앱을
   - 입력 폼과 빈 상태를 표시한다.
 - 생성 중:
   - 진행 상태와 현재 작업 상태를 표시한다.
-  - 가능하면 Gemini streaming 응답을 사용해 부분 결과를 표시한다.
+  - MVP에서는 Gemini non-streaming 응답만 사용한다.
 - 생성 후:
   - 블록 기반 에디터에 글을 표시한다.
   - 제목, 본문, 태그, 참고 출처 영역을 구분한다.
@@ -124,17 +125,17 @@ Mac 로컬에서 사용하는 Electron 기반 블로그 글 작성 보조 앱을
 
 #### Naver Blog Copy Requirements
 
-- 네이버 블로그에 붙여넣었을 때 heading, paragraph, list, bold, italic, code block, table, quote, link, image reference, tags 등의 서식을 최대한 유지한다.
-- 변환 파이프라인은 `@jjlabsio/md-to-naver-blog`를 우선 검토한다.
+- 네이버 블로그에 붙여넣었을 때 heading, paragraph, list, bold, italic, code block, quote, link, image reference, tags 등의 서식을 최대한 유지한다.
+- 변환 파이프라인은 `@jjlabsio/md-to-naver-blog`를 사용한다.
 - 기본 흐름:
   1. 에디터 블록 상태를 Markdown으로 변환한다.
   2. Markdown을 `@jjlabsio/md-to-naver-blog`의 `convert(markdown)`로 네이버 호환 HTML로 변환한다.
   3. Electron main process에서 `clipboard.write({ html, text })`로 `text/html`과 `text/plain`을 동시에 기록한다.
 - 사용자 액션:
-  - 전체 글 네이버 형식 복사
-  - 선택한 문단만 네이버 형식 복사
-  - 제목만 복사
-  - 일반 Markdown 복사
+  - 전체 글 네이버 형식 복사.
+  - 선택한 문단만 네이버 형식 복사.
+  - 일반 Markdown 복사. 이 액션은 fallback/debug 성격의 보조 기능이다.
+- 제목/본문/태그 분리 복사는 MVP 이후 개선 항목으로 둔다.
 - 변환 결과는 복사 전에 preview 또는 toast로 성공/실패를 알려준다.
 
 ### 7.2 Settings Page
@@ -146,11 +147,15 @@ Mac 로컬에서 사용하는 Electron 기반 블로그 글 작성 보조 앱을
 - 저장 상태 표시.
 - API Key는 화면에 기본적으로 masked 처리한다.
 - "연결 테스트" 버튼을 제공한다.
-- API Key는 가능한 경우 macOS Keychain에 저장하고, 기타 설정은 일반 로컬 config에 저장한다.
+- MVP에서는 API Key를 `electron-store`에 저장한다.
+- API Key 원문은 UI, 로그, 에러 메시지에 노출하지 않는다.
+- macOS Keychain 저장은 MVP 이후 보안 개선 항목으로 둔다.
 
 #### Prompt Settings
 
 - 기본 글 생성 프롬프트를 수정할 수 있는 textarea/editor.
+- 프롬프트는 Markdown 형식으로 입력하고 관리한다.
+- Gemini 응답도 Markdown 형식으로 받도록 프롬프트에 출력 형식을 명시한다.
 - 변수 지원:
   - `{{topic}}`
   - `{{image_context}}`
@@ -172,22 +177,26 @@ Mac 로컬에서 사용하는 Electron 기반 블로그 글 작성 보조 앱을
 
 - Electron main process, preload, renderer를 분리한다.
 - renderer는 Node API에 직접 접근하지 않는다.
-- 파일 시스템, clipboard, dialog, Keychain 접근은 preload IPC를 통해 main process에 위임한다.
+- 파일 시스템, clipboard, dialog, `electron-store`, Gemini 호출은 preload IPC를 통해 main process에 위임한다.
 - 기본 라우팅은 client-side state 기반으로 충분하다. 복잡한 URL 라우팅은 1차 범위에서 필요하지 않다.
 
 ### 8.2 Gemini Generation
 
 - Gemini API 호출은 main process에서 수행한다.
-- SDK는 `@google/genai` 사용을 우선 검토한다.
+- SDK는 `@google/genai`를 사용한다.
 - 모델은 `gemini-2.5-flash`로 고정한다.
 - Grounding with Google Search는 `googleSearch` tool을 사용한다.
+- MVP에서는 non-streaming 호출만 지원한다.
+- 업로드 이미지는 1장만 요청에 포함한다.
+- Gemini 출력은 Markdown을 canonical 형식으로 받는다.
 - 요청에는 다음 정보를 포함한다:
   - 사용자 주제
-  - 설정된 프롬프트
-  - 업로드 이미지
-  - 출력 형식 지시: Markdown 또는 JSON 블록 구조
+  - 설정된 Markdown 프롬프트
+  - 업로드 이미지 1장
+  - 출력 형식 지시: Markdown
 - 응답에서 가능한 경우 `groundingMetadata`를 저장한다.
-- UI에는 참고 출처 또는 citation 정보를 별도 섹션으로 보여준다.
+- Grounding 출처는 본문에 자동 삽입하지 않고 `groundingMetadata`에 저장한다.
+- UI에는 참고 출처 또는 citation 정보를 본문과 분리된 팝업/패널로 보여준다.
 - 실패 케이스:
   - API Key 없음
   - API Key invalid
@@ -199,11 +208,13 @@ Mac 로컬에서 사용하는 Electron 기반 블로그 글 작성 보조 앱을
 ### 8.3 Local Persistence
 
 - 설정 저장:
-  - API Key: macOS Keychain 우선.
-  - prompt, output path, UI 설정: `electron-store` 또는 동등한 로컬 config 저장소.
+  - API Key, prompt, output path, UI 설정: `electron-store`.
+  - API Key는 masked UI로만 표시하고 로그/에러에는 원문을 남기지 않는다.
+  - macOS Keychain은 MVP 이후 보안 개선 항목이다.
 - 글 저장:
-  - 생성 직후 지정 경로에 자동 저장.
-  - 편집 후 수동 저장 또는 debounce auto-save를 제공한다.
+  - MVP는 manual save only로 고정한다.
+  - 생성 직후나 편집 중 debounce auto-save는 제공하지 않는다.
+  - 사용자가 저장 버튼을 눌렀을 때만 지정 경로에 글 bundle을 생성한다.
 - 권장 저장 구조:
 
 ```text
@@ -243,7 +254,7 @@ type ArticleDocument = {
 ```ts
 type ArticleBlock = {
   id: string;
-  type: "heading" | "paragraph" | "list" | "quote" | "code" | "table" | "image";
+  type: "heading" | "paragraph" | "list" | "quote" | "code" | "image";
   content: unknown;
   order: number;
 };
@@ -264,15 +275,16 @@ type ArticleBlock = {
   - Electron
   - React
   - TypeScript
-  - Vite 기반 Electron 개발 환경 검토
+  - `electron-vite`
+  - npm
 - UI:
   - shadcn/ui
   - Tailwind CSS v4
   - Radix UI primitives
   - lucide-react icons
 - Editor:
-  - 1차 후보: BlockNote
-  - 대안: Tiptap + drag handle/floating menu extensions
+  - BlockNote
+  - Markdown import/export가 안정적인 block type 위주로 MVP 기능을 제한
 - AI:
   - `@google/genai`
   - `gemini-2.5-flash`
@@ -281,9 +293,11 @@ type ArticleBlock = {
   - `@jjlabsio/md-to-naver-blog`
 - Local storage:
   - `electron-store`
-  - `keytar` 또는 macOS Keychain 연동 대안
+  - macOS Keychain 또는 `keytar` 연동은 MVP 이후 개선 항목
 - Build:
-  - `electron-builder` 우선 검토
+  - `electron-builder`
+  - app name: `Blog Writing Assistant`
+  - bundle identifier: `com.local.blog-writing-assistant`
   - macOS `dmg`, `zip` target
   - `arm64`, `x64`, 필요 시 universal build 검토
 
@@ -358,10 +372,12 @@ src/
   - Naver HTML 변환 wrapper.
   - ArticleDocument serialization/deserialization.
   - prompt variable interpolation.
+  - 선택 문단 추출 및 Markdown export.
 - Integration:
   - Settings 저장/로드.
   - Gemini API 호출 mock.
-  - 이미지 업로드 후 request payload 생성.
+  - 단일 이미지 업로드 후 request payload 생성.
+  - Grounding metadata 저장.
   - clipboard HTML/plain text 복사.
 - E2E/manual:
   - API Key 저장 후 앱 재시작.
@@ -375,25 +391,20 @@ src/
 - 네이버 블로그 에디터의 붙여넣기 동작은 서비스 변경에 영향을 받을 수 있다.
 - `@jjlabsio/md-to-naver-blog`가 모든 에디터 블록 형식을 완벽히 지원하지 않을 수 있으므로, canonical Markdown 변환 규칙을 제한해야 할 수 있다.
 - Gemini Grounding 결과는 응답마다 검색 쿼리와 출처가 달라질 수 있다.
-- API Key를 로컬에 저장하더라도 완전한 보안은 보장할 수 없다. macOS Keychain 사용을 우선한다.
+- MVP에서 API Key를 `electron-store`에 저장하는 것은 보안상 최선은 아니며, 이후 Keychain 전환이 필요하다.
 - Electron macOS build에서 signing/notarization 여부에 따라 다른 Mac에서 실행 경고가 발생할 수 있다.
-- 블록 에디터 라이브러리 선택에 따라 Markdown export 품질과 커스터마이징 난이도가 달라진다.
+- BlockNote의 Markdown export 품질에 따라 일부 block type은 MVP에서 제한하거나 fallback 처리해야 할 수 있다.
 
 ## 13. Open Questions
 
-- 앱 이름, 아이콘, bundle identifier는 무엇으로 할지 정해야 한다.
-- 업로드 이미지는 1장만 지원할지, 여러 장을 지원할지 정해야 한다.
-- 생성 결과에 참고 출처를 본문 하단에 자동 포함할지, UI에만 표시할지 정해야 한다.
-- 글 저장은 자동 저장만 할지, 수동 저장 버튼도 둘지 정해야 한다.
-- 생성된 글의 기본 톤앤매너와 길이, 네이버 블로그용 문체 기준이 필요하다.
-- 네이버 블로그 복사 시 제목/본문/태그를 한 번에 복사할지, 각각 분리 복사할지 최종 UX를 정해야 한다.
+- 앱 아이콘 최종 디자인은 별도 작업으로 정한다. MVP에서는 placeholder icon을 허용한다.
 - 외부 공유용 macOS 앱이 필요한 경우 signing/notarization 범위를 추가해야 한다.
 
 ## 14. Delivery Plan
 
 ### Phase 1: Project Foundation
 
-- React + Electron + TypeScript + Vite 기반 프로젝트 구성.
+- React + Electron + TypeScript + `electron-vite` + npm 기반 프로젝트 구성.
 - Tailwind CSS v4 + shadcn/ui 설정.
 - Octo Code 디자인 토큰을 CSS 변수로 정리.
 - macOS local build script 구성.
@@ -403,28 +414,29 @@ src/
 - 좌우 2단 레이아웃 구현.
 - Sidebar navigation 구현.
 - Settings page 구현.
-- API Key 저장, prompt 저장, output path 선택 구현.
+- `electron-store` 기반 API Key 저장, Markdown prompt 저장, output path 선택 구현.
 
 ### Phase 3: Gemini Generation
 
 - Gemini client 구현.
 - Grounding with Google Search 설정.
-- 이미지 업로드 입력 처리.
-- 글 생성 요청/응답 처리.
+- 단일 이미지 업로드 입력 처리.
+- non-streaming Markdown 글 생성 요청/응답 처리.
 - 실패 상태와 loading 상태 구현.
 
 ### Phase 4: Editor and Document Persistence
 
 - 블록 기반 에디터 도입.
-- 생성 결과를 editor document로 변환.
+- BlockNote 도입.
+- Markdown 생성 결과를 editor document로 변환.
 - 문단 이동, 편집, 선택, 삭제, 복사 구현.
-- 로컬 article 저장/로드 구현.
+- 수동 로컬 article 저장/로드 구현.
 
 ### Phase 5: Naver Clipboard
 
 - Markdown export 구현.
 - `@jjlabsio/md-to-naver-blog` 변환 wrapper 구현.
-- Electron clipboard HTML/plain text 복사 구현.
+- 전체 글과 선택 문단의 Electron clipboard HTML/plain text 복사 구현.
 - 네이버 블로그 붙여넣기 수동 검증.
 
 ### Phase 6: Polish and Build Verification

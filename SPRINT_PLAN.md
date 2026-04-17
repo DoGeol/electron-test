@@ -10,7 +10,7 @@
 - 기능 구현은 테스트 코드와 테스트 케이스를 먼저 작성한 뒤 진행한다.
 - 애매한 요구사항은 구현 전에 `plan:plan-deep-interview`로 조건을 확정한다.
 - Electron main/preload/renderer 경계를 초반부터 명확히 잡는다.
-- 외부 API, 파일 시스템, clipboard, Keychain은 초반부터 mock 가능한 adapter로 감싼다.
+- 외부 API, 파일 시스템, clipboard, `electron-store`는 초반부터 mock 가능한 adapter로 감싼다.
 - MVP는 “생성 → 편집 → 네이버 복사 → 로컬 저장”의 한 흐름이 실제로 동작하는 상태로 정의한다.
 
 ## 전체 스프린트 구조
@@ -69,8 +69,8 @@
 
 목표:
 
-- 구현을 시작하기 전에 막힐 가능성이 높은 조건을 확정한다.
-- 확정되지 않아도 되는 항목과 반드시 닫아야 하는 항목을 구분한다.
+- 구현을 시작하기 전에 막힐 가능성이 높은 조건이 문서에 확정되어 있는지 확인한다.
+- 아래 확정 사항이 `SPEC.md`와 실제 구현 계획에 유지되도록 관리한다.
 
 착수 전 확인:
 
@@ -79,20 +79,25 @@
 - `docs/DESIGN.md`
 - React/Next 관련 project skills 중 React composition/performance 관련 문서
 
-확정 필요 질문:
+확정된 결정:
 
-- 앱 이름, bundle identifier, macOS 앱 표시 이름은 무엇인가?
-- 업로드 이미지는 MVP에서 1장만 지원할 것인가?
-- 글 생성 결과 저장은 생성 직후 자동 저장만 할지, 수동 저장 버튼도 둘지?
-- API Key 저장은 MVP에서 macOS Keychain까지 구현할지, `electron-store` 암호화/마스킹으로 1차 처리할지?
-- 블록 에디터는 BlockNote로 시작할지, Tiptap으로 시작할지?
-- Gemini 응답 포맷은 Markdown을 canonical으로 할지, JSON block 구조를 canonical으로 할지?
-- 네이버 복사는 전체 글/선택 문단/제목/태그를 각각 복사할지, MVP에서는 전체 글만 우선할지?
+- 스캐폴딩: `electron-vite + npm`.
+- 앱 이름: `Blog Writing Assistant`.
+- bundle identifier: `com.local.blog-writing-assistant`.
+- 저장소: API Key, Markdown prompt, output path 모두 `electron-store`.
+- API Key: UI에서는 masked 처리하고 로그/에러에는 원문을 남기지 않는다.
+- 글 저장: `manual save only`.
+- 업로드 이미지: MVP에서는 1장만 지원.
+- Gemini 응답: non-streaming Markdown.
+- Grounding 출처: metadata에 저장하고 본문과 분리된 팝업/패널로 표시.
+- 에디터: BlockNote 우선, Markdown canonical.
+- 네이버 복사: 전체 글과 선택 문단의 Naver HTML 복사, 일반 Markdown 복사.
+- 제목/본문/태그 분리 복사, 여러 이미지, streaming, Keychain, notarization은 MVP 이후로 둔다.
 
 완료 기준:
 
-- 위 질문의 MVP 범위 답변이 정리된다.
-- 답변은 `SPEC.md` 또는 별도 decision log에 반영된다.
+- 확정된 결정이 `SPEC.md`와 `SPRINT_PLAN.md`에 반영되어 있다.
+- Sprint 1 착수자가 추가 결정을 하지 않아도 스캐폴딩을 시작할 수 있다.
 
 ## Sprint 1: 스캐폴딩 및 실행 기반
 
@@ -103,9 +108,11 @@
 
 주요 작업:
 
-- Electron + React + TypeScript + Vite 기반 스캐폴딩.
+- `electron-vite + npm` 기반 Electron + React + TypeScript 스캐폴딩.
 - Tailwind CSS v4 설정.
 - shadcn/ui 초기화.
+- app name을 `Blog Writing Assistant`로 설정.
+- bundle identifier를 `com.local.blog-writing-assistant`로 설정.
 - main/preload/renderer 디렉터리 분리.
 - IPC expose API의 기본 패턴 정의.
 - lint, format, typecheck, test 명령 구성.
@@ -122,7 +129,8 @@
 - 로컬에서 앱 창이 열린다.
 - renderer가 빈 App Shell을 렌더링한다.
 - main/preload/renderer build가 통과한다.
-- macOS packaging script가 최소한 설정 수준에서 준비된다.
+- `electron-builder` 기반 macOS packaging script가 최소한 설정 수준에서 준비된다.
+- package manager는 npm으로 고정되어 있다.
 
 리스크:
 
@@ -222,9 +230,9 @@
 
 확정 게이트:
 
-- API Key 저장 방식을 확정한다.
-  - 권장 MVP: Keychain adapter 인터페이스를 만들고, macOS에서는 Keychain 구현을 사용한다.
-  - 빠른 MVP 대안: `electron-store`에 저장하되 마스킹과 로그 방지만 적용한다.
+- API Key, Markdown prompt, output path는 MVP에서 모두 `electron-store`에 저장한다.
+- Keychain adapter 구현은 MVP 범위에서 제외하고 이후 보안 개선 항목으로 둔다.
+- 글은 manual save only이므로 설정 저장과 article 저장을 혼동하지 않는다.
 
 테스트 우선 항목:
 
@@ -232,7 +240,9 @@
 - prompt 저장/복원.
 - output path 저장/복원.
 - API Key 저장/조회 adapter mock test.
-- renderer가 직접 파일 시스템/Keychain에 접근하지 않는지 IPC boundary test.
+- API Key masking 및 로그 비노출 test.
+- renderer가 직접 파일 시스템/`electron-store`에 접근하지 않는지 IPC boundary test.
+- manual save 전에는 article 파일이 생성되지 않는지 test.
 
 주요 작업:
 
@@ -240,13 +250,16 @@
 - `settings:get`, `settings:update`, `settings:testApiKey` IPC 설계.
 - output path 선택 dialog 구현.
 - API Key masking 구현.
+- Markdown prompt editor/textarea 구현.
 - 연결 테스트 버튼 구현.
 
 완료 기준:
 
 - 앱 재시작 후 설정이 유지된다.
 - API Key는 UI에 그대로 노출되지 않는다.
+- API Key 원문은 로그/에러에 남지 않는다.
 - 저장 경로 접근 불가 상태를 사용자에게 표시한다.
+- article bundle은 사용자가 저장 버튼을 누르기 전에는 생성되지 않는다.
 
 ## Sprint 5: Gemini 생성 파이프라인
 
@@ -256,26 +269,28 @@
 
 확정 게이트:
 
-- Gemini 응답 canonical format을 확정한다.
-  - 권장: Gemini 출력은 Markdown으로 받고, 내부에서는 Markdown → ArticleDocument 변환.
-  - 대안: Gemini 출력부터 JSON block 구조로 강제.
-- streaming을 MVP에 포함할지 확정한다.
-  - 권장: MVP는 non-streaming, UI loading 상태만 구현. 이후 streaming 추가.
+- Gemini 응답 canonical format은 Markdown으로 고정한다.
+- MVP는 non-streaming 호출만 지원한다.
+- 업로드 이미지는 1장만 지원한다.
+- Grounding 출처는 metadata 저장 후 별도 팝업/패널에서 표시한다.
 
 테스트 우선 항목:
 
 - Gemini request payload 생성 test.
 - `googleSearch` tool 설정 test.
-- 이미지 part 변환 test.
+- 단일 이미지 part 변환 및 validation test.
 - API 오류를 UI error model로 변환하는 test.
 - empty response/safety response 처리 test.
+- non-streaming success/error 응답 처리 test.
+- Grounding metadata 저장 test.
 
 주요 작업:
 
 - `GeminiClient` adapter 구현.
 - `@google/genai` 연동.
-- topic + prompt + image payload 구성.
+- topic + Markdown prompt + 단일 image payload 구성.
 - Grounding metadata 저장.
+- 출처 팝업/패널 데이터 모델 구현.
 - 생성 loading/error/success 상태 구현.
 - mock Gemini provider로 UI integration test 작성.
 
@@ -283,7 +298,8 @@
 
 - mock provider로 글 생성 플로우가 완주한다.
 - 실제 API Key가 있으면 Gemini 호출이 성공한다.
-- Grounding source가 UI에 표시된다.
+- Grounding source가 본문과 분리된 팝업/패널에 표시된다.
+- 생성 결과가 Markdown canonical로 보존된다.
 - 실패 상태가 화면에 명확히 표시된다.
 
 ## Sprint 6: 블록 에디터와 문서 저장
@@ -294,14 +310,15 @@
 
 확정 게이트:
 
-- 에디터 라이브러리 확정.
-  - 권장 검증 순서: BlockNote로 hover toolbar, block move, Markdown export가 충분한지 먼저 PoC.
-  - 실패 시 Tiptap + custom floating menu로 전환.
+- 에디터는 BlockNote로 고정한다.
+- Markdown canonical import/export가 안정적인 block type만 MVP에서 지원한다.
+- 지원 block type: heading, paragraph, list, quote, code, image reference.
 
 테스트 우선 항목:
 
 - Markdown → ArticleDocument 변환.
 - ArticleDocument → editor blocks 변환.
+- BlockNote block → Markdown export.
 - block move up/down.
 - selected blocks copy target 생성.
 - save path에 article bundle 생성하는 storage test.
@@ -311,10 +328,11 @@
 - 블록 에디터 도입.
 - paragraph hover floating toolbar 구현.
 - block select/move/copy/delete 구현.
-- article auto-save 또는 manual save 구현.
+- article manual save 구현.
 - 저장 구조 생성:
   - `article.json`
   - `article.md`
+  - `naver.html`
   - `metadata.json`
   - `input-image.<ext>`
 
@@ -323,7 +341,8 @@
 - 생성 글을 편집할 수 있다.
 - 문단을 위/아래로 이동할 수 있다.
 - 선택 문단을 추출할 수 있다.
-- 편집 결과가 로컬 파일로 저장된다.
+- 사용자가 저장 버튼을 누르면 편집 결과가 로컬 파일로 저장된다.
+- BlockNote block과 Markdown canonical 간 변환이 테스트로 보호된다.
 
 ## Sprint 7: 네이버 블로그 복사
 
@@ -333,15 +352,15 @@
 
 확정 게이트:
 
-- MVP copy 범위를 확정한다.
-  - 권장 MVP: 전체 글 Naver HTML 복사 + 일반 Markdown 복사.
-  - 다음 단계: 선택 문단 복사, 제목/태그 분리 복사.
+- MVP copy 범위는 전체 글 Naver HTML 복사, 선택 문단 Naver HTML 복사, 일반 Markdown 복사로 고정한다.
+- 제목/본문/태그 분리 복사는 MVP 이후로 둔다.
 
 테스트 우선 항목:
 
 - ArticleDocument → Markdown export.
 - Markdown → Naver HTML 변환 wrapper.
 - HTML/plain text clipboard payload 생성.
+- 선택 문단 → Markdown → Naver HTML 변환.
 - 지원하지 않는 block type fallback 처리.
 - conversion failure 시 error 반환.
 
@@ -349,7 +368,9 @@
 
 - `@jjlabsio/md-to-naver-blog` 연동.
 - `naverClipboard.copyArticle` IPC 구현.
+- `naverClipboard.copySelectedBlocks` IPC 구현.
 - 전체 글 복사 버튼 구현.
+- 선택 문단 복사 버튼 구현.
 - Markdown 복사 버튼 구현.
 - 복사 성공/실패 toast 구현.
 - 실제 네이버 블로그 붙여넣기 manual test checklist 작성.
@@ -357,6 +378,7 @@
 완료 기준:
 
 - 전체 글을 HTML + plain text로 clipboard에 기록한다.
+- 선택 문단을 HTML + plain text로 clipboard에 기록한다.
 - 네이버 블로그 에디터에 붙여넣었을 때 기본 서식이 유지된다.
 - 실패 시 사용자가 복구 가능한 메시지를 본다.
 
@@ -428,27 +450,26 @@
 - 네이버 블로그 붙여넣기
 - packaged app 실행
 
-## 구현 전 결정이 필요한 항목
+## 구현 전 확정 상태
 
-다음 항목은 관련 Sprint 착수 직전에 `plan:plan-deep-interview`로 짧게 조건을 확정한다.
+다음 항목은 최종 검토에서 확정됐다. 구현 중 이 결정을 바꾸면 관련 sprint 시작 전에 `plan:plan-deep-interview`로 다시 확정한다.
 
 - Sprint 1 전:
-  - package manager
-  - Electron scaffold 방식
-  - 앱 이름/bundle id
+  - 확정됨: `electron-vite + npm`
+  - 확정됨: `Blog Writing Assistant`, `com.local.blog-writing-assistant`
 - Sprint 4 전:
-  - API Key 저장 방식
-  - 설정 저장소
+  - 확정됨: `electron-store only`
+  - 확정됨: `manual save only`
 - Sprint 5 전:
-  - Gemini 응답 포맷
-  - streaming 포함 여부
-  - 이미지 개수 제한
+  - 확정됨: Markdown canonical
+  - 확정됨: non-streaming
+  - 확정됨: 단일 이미지
 - Sprint 6 전:
-  - BlockNote vs Tiptap
-  - auto-save vs manual save
+  - 확정됨: BlockNote
+  - 확정됨: Markdown import/export 가능한 block type 중심
 - Sprint 7 전:
-  - 네이버 복사 MVP 범위
-  - 제목/본문/태그 분리 복사 여부
+  - 확정됨: 전체 글 + 선택 문단 Naver HTML 복사
+  - 확정됨: 제목/본문/태그 분리 복사는 MVP 이후
 
 ## 권장 MVP 컷
 
@@ -460,14 +481,14 @@ MVP에 반드시 포함:
 - 주제 + 단일 이미지 입력
 - Gemini `gemini-2.5-flash` + Grounding 기반 글 생성
 - 블록 단위 편집/이동
-- 전체 글 Naver HTML 복사
-- 로컬 저장
+- 전체 글 및 선택 문단 Naver HTML 복사
+- 수동 로컬 저장
 
 MVP 이후로 미뤄도 되는 항목:
 
 - 여러 이미지 업로드
 - Gemini streaming 출력
-- 선택 문단별 네이버 복사 고도화
 - 제목/태그 개별 클립보드 UX
+- Keychain 기반 API Key 저장
 - app notarization
 - 자동 발행/브라우저 자동화
