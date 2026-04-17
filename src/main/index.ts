@@ -1,6 +1,8 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import Store from 'electron-store';
 import { join } from 'node:path';
+import { registerGeneratorIpcHandlers } from './generator/ipc';
+import { createGeneratorService } from './generator/generator-service';
 import { registerSettingsIpcHandlers } from './settings/ipc';
 import { createSettingsService } from './settings/settings-service';
 
@@ -46,11 +48,26 @@ app.whenReady().then(() => {
       },
     },
   });
+  const generatorService = createGeneratorService({
+    logger: {
+      info: (message, meta) => {
+        console.info(message, meta);
+      },
+      error: (message, meta) => {
+        console.error(message, meta);
+      },
+    },
+  });
 
   registerSettingsIpcHandlers({
     ipcMain,
     settingsService,
     dialog,
+  });
+  registerGeneratorIpcHandlers({
+    ipcMain,
+    settingsService,
+    generatorService,
   });
 
   createWindow();

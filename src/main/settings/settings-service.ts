@@ -51,6 +51,13 @@ export function createSettingsService({ store, logger }: SettingsServiceDeps) {
   const getOutputPath = () => normalizeString(store.get<string>(STORE_KEYS.outputPath));
 
   return {
+    getGenerationSettings(): { apiKey: string; promptMarkdown: string } {
+      return {
+        apiKey: getRawApiKey(),
+        promptMarkdown: getPromptMarkdown(),
+      };
+    },
+
     getSettings(): SettingsPayload {
       const apiKey = getRawApiKey();
       return {

@@ -71,13 +71,18 @@ export default function App() {
   const [page, setPage] = useState<Page>('generator');
   const [topic, setTopic] = useState('');
   const [imageName, setImageName] = useState('');
+  const [imagePath, setImagePath] = useState<string | undefined>(undefined);
   const [apiKey, setApiKey] = useState('');
   const [promptMarkdown, setPromptMarkdown] = useState('## 출력 형식\n- Markdown만 반환\n- 제목, 본문, 태그 포함');
   const [outputPath, setOutputPath] = useState('');
   const [apiKeyDirty, setApiKeyDirty] = useState(false);
   const [settingsNotice, setSettingsNotice] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generatedMarkdown, setGeneratedMarkdown] = useState('');
+  const [generateNotice, setGenerateNotice] = useState('');
+  const [groundingSummary, setGroundingSummary] = useState('');
 
-  const generateDisabled = useMemo(() => topic.trim().length === 0, [topic]);
+  const generateDisabled = useMemo(() => topic.trim().length === 0 || isGenerating, [isGenerating, topic]);
   const pageTitle = page === 'generator' ? '블로그 글 생성' : '설정';
   const pageDescription =
     page === 'generator'
@@ -121,6 +126,28 @@ export default function App() {
       setOutputPath(selectedPath);
     }
   }, [bridge]);
+
+  const handleGenerate = useCallback(async () => {
+    setGenerateNotice('');
+    setIsGenerating(true);
+
+    try {
+      const result = await bridge.generator.generate({
+        topic: topic.trim(),
+        imagePath,
+      });
+
+      setGeneratedMarkdown(result.markdown);
+      const sourceCount = result.grounding?.sources.length ?? 0;
+      setGroundingSummary(sourceCount > 0 ? `검색 출처 ${sourceCount}건` : '검색 출처 없음');
+      setGenerateNotice('글 생성이 완료되었습니다.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '글 생성에 실패했습니다.';
+      setGenerateNotice(message);
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [bridge, imagePath, topic]);
 
   useEffect(() => {
     if (page === 'settings') {
@@ -197,19 +224,26 @@ export default function App() {
                       accept="image/png,image/jpeg,image/webp"
                       onChange={(event) => {
                         const file = event.target.files?.[0];
+                        const fileWithPath = file as (File & { path?: string }) | undefined;
                         setImageName(file ? file.name : '');
+                        setImagePath(fileWithPath?.path);
                       }}
                     />
                     <p className="text-xs text-[var(--text-muted)]">{imageName || 'PNG, JPG, WEBP 1장'}</p>
                   </div>
 
                   <div className="flex items-end">
-                    <Button size="lg" disabled={generateDisabled}>
+                    <Button size="lg" disabled={generateDisabled} onClick={handleGenerate}>
                       <Sparkles className="size-4" />
-                      AI 글 생성
+                      {isGenerating ? '생성 중...' : 'AI 글 생성'}
                     </Button>
                   </div>
                 </div>
+                {generateNotice ? (
+                  <p className="text-sm text-[var(--text-muted)]" role="status">
+                    {generateNotice}
+                  </p>
+                ) : null}
 
                 <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
                   <section className="overflow-hidden rounded-md border border-[var(--border)] bg-[var(--surface)]">
@@ -217,6 +251,11 @@ export default function App() {
                       <h3 className="text-base font-semibold">생성된 글 본문</h3>
                       <p className="text-xs text-[var(--text-muted)]">문단 hover 시 플로팅 액션 표시</p>
                     </div>
+                    {generatedMarkdown ? (
+                      <article className="border-b border-[var(--border)] px-4 py-4">
+                        <pre className="whitespace-pre-wrap text-sm leading-6">{generatedMarkdown}</pre>
+                      </article>
+                    ) : null}
                     {mockBlocks.map((block) => (
                       <article key={block.id} className="group grid grid-cols-[1fr_auto] gap-3 border-b border-[var(--border)] px-4 py-4 last:border-b-0">
                         <div className="space-y-2">
@@ -268,6 +307,7 @@ export default function App() {
                     </Button>
                     <div className="border-t border-[var(--border)] pt-3">
                       <p className="mb-2 text-xs font-semibold text-[var(--text-muted)]">출처</p>
+                      {groundingSummary ? <p className="mb-2 text-xs text-[var(--text-muted)]">{groundingSummary}</p> : null}
                       <Button variant="secondary" className="w-full justify-start">
                         <Link2 className="size-4" />
                         출처 보기

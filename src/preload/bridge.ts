@@ -1,5 +1,11 @@
 import type { IpcRenderer } from 'electron';
-import { IPC_CHANNELS, type SettingsPayload, type UpdateSettingsPayload } from '../shared/ipc';
+import {
+  IPC_CHANNELS,
+  type GeneratorGeneratePayload,
+  type GeneratorGenerateResult,
+  type SettingsPayload,
+  type UpdateSettingsPayload,
+} from '../shared/ipc';
 
 export type BridgeApi = ReturnType<typeof createBridgeApi>;
 
@@ -12,8 +18,8 @@ export function createBridgeApi(ipcRenderer: Pick<IpcRenderer, 'invoke'>) {
       selectOutputPath: () => ipcRenderer.invoke(IPC_CHANNELS.settingsSelectOutputPath) as Promise<string | null>,
     },
     generator: {
-      generate: (payload: { topic: string; promptMarkdown: string; imagePath?: string }) =>
-        ipcRenderer.invoke(IPC_CHANNELS.generatorGenerate, payload) as Promise<{ markdown: string; grounding?: unknown }>,
+      generate: (payload: GeneratorGeneratePayload) =>
+        ipcRenderer.invoke(IPC_CHANNELS.generatorGenerate, payload) as Promise<GeneratorGenerateResult>,
     },
     article: {
       save: (payload: { markdown: string; metadata: Record<string, unknown> }) =>

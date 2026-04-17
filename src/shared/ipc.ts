@@ -10,6 +10,16 @@ export const IPC_CHANNELS = {
   generatorGenerate: 'generator:generate',
 } as const;
 
+export type GroundingSource = {
+  title: string;
+  uri: string;
+};
+
+export type GroundingPayload = {
+  webSearchQueries: string[];
+  sources: GroundingSource[];
+};
+
 export type SettingsPayload = {
   apiKeyMasked: string;
   promptMarkdown: string;
@@ -20,4 +30,14 @@ export type UpdateSettingsPayload = {
   apiKey?: string;
   promptMarkdown?: string;
   outputPath?: string;
+};
+
+export type GeneratorGeneratePayload = {
+  topic: string;
+  imagePath?: string;
+};
+
+export type GeneratorGenerateResult = {
+  markdown: string;
+  grounding?: GroundingPayload;
 };
