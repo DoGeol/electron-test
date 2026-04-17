@@ -13,7 +13,8 @@ import {
   Sparkles,
   Trash2,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { BridgeApi } from '../../preload/bridge';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
 import { Label } from './components/ui/label';
@@ -36,13 +37,45 @@ const navItems: Array<{ key: Page; label: string; icon: typeof FileText }> = [
   { key: 'settings', label: '설정', icon: Settings },
 ];
 
+const FALLBACK_BRIDGE: BridgeApi = {
+  settings: {
+    get: async () => ({
+      apiKeyMasked: '',
+      promptMarkdown: '## 출력 형식\n- Markdown만 반환\n- 제목, 본문, 태그 포함',
+      outputPath: '',
+    }),
+    update: async () => undefined,
+    testApiKey: async () => ({ ok: false, message: '설정 저장 기능은 데스크톱 앱에서 사용할 수 있습니다.' }),
+    selectOutputPath: async () => null,
+  },
+  generator: {
+    generate: async () => ({ markdown: '', grounding: undefined }),
+  },
+  article: {
+    save: async () => ({ ok: false, path: '' }),
+  },
+  clipboard: {
+    copyNaver: async () => ({ ok: false }),
+    copyMarkdown: async () => ({ ok: false }),
+    copySelectionNaver: async () => ({ ok: false }),
+  },
+};
+
+function resolveBridge(): BridgeApi {
+  const maybeBridge = (window as unknown as { bridge?: BridgeApi }).bridge;
+  return maybeBridge ?? FALLBACK_BRIDGE;
+}
+
 export default function App() {
+  const bridge = useMemo(() => resolveBridge(), []);
   const [page, setPage] = useState<Page>('generator');
   const [topic, setTopic] = useState('');
   const [imageName, setImageName] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [promptMarkdown, setPromptMarkdown] = useState('## 출력 형식\n- Markdown만 반환\n- 제목, 본문, 태그 포함');
   const [outputPath, setOutputPath] = useState('');
+  const [apiKeyDirty, setApiKeyDirty] = useState(false);
+  const [settingsNotice, setSettingsNotice] = useState('');
 
   const generateDisabled = useMemo(() => topic.trim().length === 0, [topic]);
   const pageTitle = page === 'generator' ? '블로그 글 생성' : '설정';
@@ -50,6 +83,50 @@ export default function App() {
     page === 'generator'
       ? '주제와 참고 이미지를 기반으로 AI 초안을 만들고 문단 단위로 편집합니다.'
       : 'API 키, 기본 프롬프트, 결과 저장 경로를 로컬에서 관리합니다.';
+
+  const loadSettings = useCallback(async () => {
+    try {
+      const settings = await bridge.settings.get();
+      setApiKey(settings.apiKeyMasked);
+      setPromptMarkdown(settings.promptMarkdown);
+      setOutputPath(settings.outputPath);
+      setApiKeyDirty(false);
+    } catch {
+      setSettingsNotice('설정 불러오기에 실패했습니다.');
+    }
+  }, [bridge]);
+
+  const saveSettings = useCallback(async () => {
+    try {
+      await bridge.settings.update({
+        ...(apiKeyDirty ? { apiKey } : {}),
+        promptMarkdown,
+        outputPath,
+      });
+      await loadSettings();
+      setSettingsNotice('설정을 저장했습니다.');
+    } catch {
+      setSettingsNotice('설정 저장에 실패했습니다.');
+    }
+  }, [apiKey, apiKeyDirty, bridge, loadSettings, outputPath, promptMarkdown]);
+
+  const handleTestApiKey = useCallback(async () => {
+    const result = await bridge.settings.testApiKey(apiKeyDirty ? apiKey : undefined);
+    setSettingsNotice(result.message);
+  }, [apiKey, apiKeyDirty, bridge]);
+
+  const handleSelectOutputPath = useCallback(async () => {
+    const selectedPath = await bridge.settings.selectOutputPath();
+    if (selectedPath) {
+      setOutputPath(selectedPath);
+    }
+  }, [bridge]);
+
+  useEffect(() => {
+    if (page === 'settings') {
+      void loadSettings();
+    }
+  }, [loadSettings, page]);
 
   return (
     <div className="h-full w-full bg-[var(--bg)] text-[var(--text)]">
@@ -208,7 +285,10 @@ export default function App() {
                     id="api-key"
                     type="password"
                     value={apiKey}
-                    onChange={(event) => setApiKey(event.target.value)}
+                    onChange={(event) => {
+                      setApiKey(event.target.value);
+                      setApiKeyDirty(true);
+                    }}
                     placeholder="AIzA... 형식의 키 입력"
                   />
                 </div>
@@ -234,7 +314,7 @@ export default function App() {
                       onChange={(event) => setOutputPath(event.target.value)}
                       placeholder="/Users/you/Documents/blog-output"
                     />
-                    <Button variant="secondary" className="shrink-0">
+                    <Button variant="secondary" className="shrink-0" onClick={handleSelectOutputPath}>
                       <FolderOpen className="size-4" />
                       선택
                     </Button>
@@ -242,15 +322,16 @@ export default function App() {
                 </div>
 
                 <div className="flex flex-wrap gap-2 pt-1">
-                  <Button variant="secondary">
+                  <Button variant="secondary" onClick={handleTestApiKey}>
                     <KeyRound className="size-4" />
                     연결 테스트
                   </Button>
-                  <Button>
+                  <Button onClick={saveSettings}>
                     <Save className="size-4" />
                     설정 저장
                   </Button>
                 </div>
+                {settingsNotice ? <p className="text-xs text-[var(--text-muted)]">{settingsNotice}</p> : null}
               </section>
             )}
           </div>

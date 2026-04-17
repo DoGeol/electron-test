@@ -12,11 +12,14 @@ describe('createBridgeApi', () => {
     expect(api).toHaveProperty('settings.get');
     expect(api).toHaveProperty('settings.update');
     expect(api).toHaveProperty('settings.testApiKey');
+    expect(api).toHaveProperty('settings.selectOutputPath');
     expect(api).toHaveProperty('generator.generate');
     expect(api).toHaveProperty('article.save');
     expect(api).toHaveProperty('clipboard.copyNaver');
     expect(api).toHaveProperty('clipboard.copyMarkdown');
     expect(api).toHaveProperty('clipboard.copySelectionNaver');
+    expect(api).not.toHaveProperty('fs');
+    expect(api).not.toHaveProperty('electronStore');
   });
 
   it('routes to expected IPC channel for settings.get', async () => {

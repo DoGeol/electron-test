@@ -1,5 +1,8 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import Store from 'electron-store';
 import { join } from 'node:path';
+import { registerSettingsIpcHandlers } from './settings/ipc';
+import { createSettingsService } from './settings/settings-service';
 
 function createWindow() {
   const window = new BrowserWindow({
@@ -29,6 +32,27 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  const store = new Store<Record<string, unknown>>({
+    name: 'blog-writing-assistant',
+  });
+  const settingsService = createSettingsService({
+    store,
+    logger: {
+      info: (message, meta) => {
+        console.info(message, meta);
+      },
+      error: (message, meta) => {
+        console.error(message, meta);
+      },
+    },
+  });
+
+  registerSettingsIpcHandlers({
+    ipcMain,
+    settingsService,
+    dialog,
+  });
+
   createWindow();
 
   app.on('activate', () => {

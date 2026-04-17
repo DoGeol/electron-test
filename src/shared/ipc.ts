@@ -2,6 +2,7 @@ export const IPC_CHANNELS = {
   settingsGet: 'settings:get',
   settingsUpdate: 'settings:update',
   settingsTestApiKey: 'settings:testApiKey',
+  settingsSelectOutputPath: 'settings:selectOutputPath',
   articleSave: 'article:save',
   articleCopyNaver: 'clipboard:copyNaver',
   articleCopyMarkdown: 'clipboard:copyMarkdown',
