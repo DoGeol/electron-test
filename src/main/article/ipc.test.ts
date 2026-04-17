@@ -32,6 +32,11 @@ describe('registerArticleIpcHandlers', () => {
       ipcMain,
       settingsService,
       articleSaveService,
+      clipboardService: {
+        copyNaver: vi.fn(async () => ({ ok: true })),
+        copyMarkdown: vi.fn(async () => ({ ok: true })),
+        copySelectionNaver: vi.fn(async () => ({ ok: true })),
+      },
     });
 
     expect(handlers.has(IPC_CHANNELS.articleSave)).toBe(true);
@@ -49,6 +54,48 @@ describe('registerArticleIpcHandlers', () => {
       ok: true,
       path: '/tmp/article-output/2026-04-17-sample',
     });
+  });
+
+  it('registers clipboard channels and delegates markdown payload', async () => {
+    const handlers = new Map<string, (...args: unknown[]) => unknown>();
+    const ipcMain = {
+      handle: vi.fn((channel: string, handler: (...args: unknown[]) => unknown) => {
+        handlers.set(channel, handler);
+      }),
+    };
+
+    const clipboardService = {
+      copyNaver: vi.fn(async () => ({ ok: true })),
+      copyMarkdown: vi.fn(async () => ({ ok: true })),
+      copySelectionNaver: vi.fn(async () => ({ ok: true })),
+    };
+
+    registerArticleIpcHandlers({
+      ipcMain,
+      settingsService: {
+        getSettings: () => ({
+          apiKeyMasked: '',
+          promptMarkdown: '',
+          outputPath: '/tmp/article-output',
+        }),
+      },
+      articleSaveService: {
+        saveArticle: vi.fn(async () => ({ ok: true, path: '/tmp/article-output/sample' })),
+      },
+      clipboardService,
+    });
+
+    expect(handlers.has(IPC_CHANNELS.articleCopyNaver)).toBe(true);
+    expect(handlers.has(IPC_CHANNELS.articleCopyMarkdown)).toBe(true);
+    expect(handlers.has(IPC_CHANNELS.articleCopySelectionNaver)).toBe(true);
+
+    await handlers.get(IPC_CHANNELS.articleCopyNaver)?.({}, '# 전체 글');
+    await handlers.get(IPC_CHANNELS.articleCopyMarkdown)?.({}, '# 원문');
+    await handlers.get(IPC_CHANNELS.articleCopySelectionNaver)?.({}, '## 선택 문단');
+
+    expect(clipboardService.copyNaver).toHaveBeenCalledWith('# 전체 글');
+    expect(clipboardService.copyMarkdown).toHaveBeenCalledWith('# 원문');
+    expect(clipboardService.copySelectionNaver).toHaveBeenCalledWith('## 선택 문단');
   });
 
   it('throws when settings output path is empty', async () => {
@@ -70,6 +117,11 @@ describe('registerArticleIpcHandlers', () => {
       },
       articleSaveService: {
         saveArticle: vi.fn(async () => ({ ok: true, path: '' })),
+      },
+      clipboardService: {
+        copyNaver: vi.fn(async () => ({ ok: true })),
+        copyMarkdown: vi.fn(async () => ({ ok: true })),
+        copySelectionNaver: vi.fn(async () => ({ ok: true })),
       },
     });
 

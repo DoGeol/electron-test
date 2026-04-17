@@ -73,6 +73,7 @@ export default function App() {
   const [generateNotice, setGenerateNotice] = useState('');
   const [groundingSummary, setGroundingSummary] = useState('');
   const [saveNotice, setSaveNotice] = useState('');
+  const [copyNotice, setCopyNotice] = useState('');
   const [lastGrounding, setLastGrounding] = useState<GroundingPayload | undefined>(undefined);
 
   const generateDisabled = useMemo(() => topic.trim().length === 0 || isGenerating, [isGenerating, topic]);
@@ -123,6 +124,7 @@ export default function App() {
   const handleGenerate = useCallback(async () => {
     setGenerateNotice('');
     setSaveNotice('');
+    setCopyNotice('');
     setIsGenerating(true);
 
     try {
@@ -180,7 +182,7 @@ export default function App() {
   const handleSaveArticle = useCallback(async () => {
     setSaveNotice('');
 
-    const markdown = editor.blocksToMarkdownLossy().trim();
+    const markdown = editor.blocksToMarkdownLossy().trim() || generatedMarkdown.trim();
     if (!markdown) {
       setSaveNotice('저장할 본문이 없습니다. 글을 생성하거나 편집해주세요.');
       return;
@@ -200,7 +202,69 @@ export default function App() {
       const message = error instanceof Error ? error.message : '저장에 실패했습니다.';
       setSaveNotice(message);
     }
-  }, [bridge, editor, imagePath, lastGrounding, topic]);
+  }, [bridge, editor, generatedMarkdown, imagePath, lastGrounding, topic]);
+
+  const handleCopyNaver = useCallback(async () => {
+    setCopyNotice('');
+    const markdown = editor.blocksToMarkdownLossy().trim() || generatedMarkdown.trim();
+    if (!markdown) {
+      setCopyNotice('복사할 본문이 없습니다. 글을 생성하거나 편집해주세요.');
+      return;
+    }
+
+    try {
+      await bridge.clipboard.copyNaver(markdown);
+      setCopyNotice('전체 글을 네이버 형식으로 복사했습니다.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '네이버 복사에 실패했습니다.';
+      setCopyNotice(message);
+    }
+  }, [bridge, editor, generatedMarkdown]);
+
+  const handleCopySelectionNaver = useCallback(async () => {
+    setCopyNotice('');
+
+    const selection = editor.getSelection();
+    if (!selection) {
+      setCopyNotice('선택된 문단이 없습니다. 복사할 문단을 먼저 선택해주세요.');
+      return;
+    }
+
+    const selectionBlocks = editor.getSelectionCutBlocks().blocks;
+    const markdown = editor
+      .blocksToMarkdownLossy(selectionBlocks as Parameters<typeof editor.blocksToMarkdownLossy>[0])
+      .trim();
+
+    if (!markdown) {
+      setCopyNotice('선택된 문단이 없습니다. 복사할 문단을 먼저 선택해주세요.');
+      return;
+    }
+
+    try {
+      await bridge.clipboard.copySelectionNaver(markdown);
+      setCopyNotice('선택 문단을 네이버 형식으로 복사했습니다.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '선택 문단 복사에 실패했습니다.';
+      setCopyNotice(message);
+    }
+  }, [bridge, editor]);
+
+  const handleCopyMarkdown = useCallback(async () => {
+    setCopyNotice('');
+    const markdown = editor.blocksToMarkdownLossy().trim() || generatedMarkdown.trim();
+    if (!markdown) {
+      setCopyNotice('복사할 본문이 없습니다. 글을 생성하거나 편집해주세요.');
+      return;
+    }
+
+    try {
+      await bridge.clipboard.copyMarkdown(markdown);
+      setCopyNotice('Markdown을 복사했습니다.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Markdown 복사에 실패했습니다.';
+      setCopyNotice(message);
+    }
+  }, [bridge, editor, generatedMarkdown]);
 
   useEffect(() => {
     if (page === 'settings') {
@@ -322,15 +386,15 @@ export default function App() {
 
                   <aside className="space-y-4 rounded-md border border-[var(--border)] bg-[var(--surface)] p-4">
                     <h3 className="text-sm font-semibold">작업 액션</h3>
-                    <Button variant="secondary" className="w-full justify-start">
+                    <Button variant="secondary" className="w-full justify-start" onClick={handleCopyNaver}>
                       <Copy className="size-4" />
                       전체 글 네이버 복사
                     </Button>
-                    <Button variant="secondary" className="w-full justify-start">
+                    <Button variant="secondary" className="w-full justify-start" onClick={handleCopySelectionNaver}>
                       <Copy className="size-4" />
                       선택 문단 복사
                     </Button>
-                    <Button variant="secondary" className="w-full justify-start">
+                    <Button variant="secondary" className="w-full justify-start" onClick={handleCopyMarkdown}>
                       <FileText className="size-4" />
                       Markdown 복사
                     </Button>
@@ -339,6 +403,7 @@ export default function App() {
                       저장
                     </Button>
                     {saveNotice ? <p className="text-xs text-[var(--text-muted)]">{saveNotice}</p> : null}
+                    {copyNotice ? <p className="text-xs text-[var(--text-muted)]">{copyNotice}</p> : null}
                     <div className="border-t border-[var(--border)] pt-3">
                       <p className="mb-2 text-xs font-semibold text-[var(--text-muted)]">출처</p>
                       {groundingSummary ? <p className="mb-2 text-xs text-[var(--text-muted)]">{groundingSummary}</p> : null}

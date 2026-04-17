@@ -1,6 +1,7 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain } from 'electron';
 import Store from 'electron-store';
 import { join } from 'node:path';
+import { createClipboardService } from './article/clipboard-service';
 import { registerArticleIpcHandlers } from './article/ipc';
 import { createArticleSaveService } from './article/save-service';
 import { registerGeneratorIpcHandlers } from './generator/ipc';
@@ -61,6 +62,9 @@ app.whenReady().then(() => {
     },
   });
   const articleSaveService = createArticleSaveService();
+  const clipboardService = createClipboardService({
+    clipboard,
+  });
 
   registerSettingsIpcHandlers({
     ipcMain,
@@ -76,6 +80,7 @@ app.whenReady().then(() => {
     ipcMain,
     settingsService,
     articleSaveService,
+    clipboardService,
   });
 
   createWindow();

@@ -12,10 +12,17 @@ type ArticleSaveServiceLike = {
   saveArticle: (input: { outputPath: string; markdown: string; metadata: ArticleSavePayload['metadata'] }) => Promise<{ ok: boolean; path: string }>;
 };
 
+type ClipboardServiceLike = {
+  copyNaver: (markdown: string) => Promise<{ ok: boolean }>;
+  copyMarkdown: (markdown: string) => Promise<{ ok: boolean }>;
+  copySelectionNaver: (markdown: string) => Promise<{ ok: boolean }>;
+};
+
 type RegisterArticleIpcHandlersArgs = {
   ipcMain: IpcMainLike;
   settingsService: SettingsServiceLike;
   articleSaveService: ArticleSaveServiceLike;
+  clipboardService: ClipboardServiceLike;
 };
 
 function parseSavePayload(payload: unknown): ArticleSavePayload {
@@ -33,7 +40,12 @@ function parseSavePayload(payload: unknown): ArticleSavePayload {
   };
 }
 
-export function registerArticleIpcHandlers({ ipcMain, settingsService, articleSaveService }: RegisterArticleIpcHandlersArgs): void {
+export function registerArticleIpcHandlers({
+  ipcMain,
+  settingsService,
+  articleSaveService,
+  clipboardService,
+}: RegisterArticleIpcHandlersArgs): void {
   ipcMain.handle(IPC_CHANNELS.articleSave, async (_event, payload: unknown) => {
     const parsedPayload = parseSavePayload(payload);
     const outputPath = settingsService.getSettings().outputPath;
@@ -48,4 +60,14 @@ export function registerArticleIpcHandlers({ ipcMain, settingsService, articleSa
       metadata: parsedPayload.metadata,
     });
   });
+
+  ipcMain.handle(IPC_CHANNELS.articleCopyNaver, async (_event, markdown: unknown) =>
+    clipboardService.copyNaver(typeof markdown === 'string' ? markdown : '')
+  );
+  ipcMain.handle(IPC_CHANNELS.articleCopyMarkdown, async (_event, markdown: unknown) =>
+    clipboardService.copyMarkdown(typeof markdown === 'string' ? markdown : '')
+  );
+  ipcMain.handle(IPC_CHANNELS.articleCopySelectionNaver, async (_event, markdown: unknown) =>
+    clipboardService.copySelectionNaver(typeof markdown === 'string' ? markdown : '')
+  );
 }
