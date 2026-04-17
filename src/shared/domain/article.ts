@@ -1,5 +1,21 @@
 export type ArticleBlockType = 'heading' | 'paragraph' | 'list' | 'quote' | 'code' | 'image';
 
+export type GroundingSource = {
+  title: string;
+  uri: string;
+};
+
+export type GroundingMetadata = {
+  webSearchQueries: string[];
+  sources: GroundingSource[];
+};
+
+export type SourceImage = {
+  fileName: string;
+  localPath: string;
+  mimeType: string;
+};
+
 export type ArticleBlock = {
   id: string;
   type: ArticleBlockType;
@@ -17,6 +33,8 @@ export type ArticleDocument = {
   promptVersion: string;
   blocks: ArticleBlock[];
   tags: string[];
+  grounding?: GroundingMetadata;
+  sourceImage?: SourceImage;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -41,6 +59,30 @@ function isArticleBlock(value: unknown): value is ArticleBlock {
     order >= 0 &&
     'content' in value
   );
+}
+
+function isGroundingSource(value: unknown): value is GroundingSource {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return typeof value.title === 'string' && typeof value.uri === 'string';
+}
+
+function isGroundingMetadata(value: unknown): value is GroundingMetadata {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return Array.isArray(value.webSearchQueries) && value.webSearchQueries.every((query) => typeof query === 'string') && Array.isArray(value.sources) && value.sources.every((source) => isGroundingSource(source));
+}
+
+function isSourceImage(value: unknown): value is SourceImage {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return typeof value.fileName === 'string' && typeof value.localPath === 'string' && typeof value.mimeType === 'string';
 }
 
 function assertArticleDocument(value: unknown): asserts value is ArticleDocument {
@@ -68,6 +110,14 @@ function assertArticleDocument(value: unknown): asserts value is ArticleDocument
 
   if (!value.tags.every((tag) => typeof tag === 'string')) {
     throw new Error('Invalid article payload: invalid tags');
+  }
+
+  if (value.grounding !== undefined && !isGroundingMetadata(value.grounding)) {
+    throw new Error('Invalid article payload: invalid grounding');
+  }
+
+  if (value.sourceImage !== undefined && !isSourceImage(value.sourceImage)) {
+    throw new Error('Invalid article payload: invalid source image');
   }
 }
 

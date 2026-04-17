@@ -1,5 +1,7 @@
 import type { IpcRenderer } from 'electron';
 import {
+  type ArticleSavePayload,
+  type ArticleSaveResult,
   IPC_CHANNELS,
   type GeneratorGeneratePayload,
   type GeneratorGenerateResult,
@@ -22,8 +24,7 @@ export function createBridgeApi(ipcRenderer: Pick<IpcRenderer, 'invoke'>) {
         ipcRenderer.invoke(IPC_CHANNELS.generatorGenerate, payload) as Promise<GeneratorGenerateResult>,
     },
     article: {
-      save: (payload: { markdown: string; metadata: Record<string, unknown> }) =>
-        ipcRenderer.invoke(IPC_CHANNELS.articleSave, payload) as Promise<{ ok: boolean; path: string }>,
+      save: (payload: ArticleSavePayload) => ipcRenderer.invoke(IPC_CHANNELS.articleSave, payload) as Promise<ArticleSaveResult>,
     },
     clipboard: {
       copyNaver: (markdown: string) => ipcRenderer.invoke(IPC_CHANNELS.articleCopyNaver, markdown) as Promise<{ ok: boolean }>,

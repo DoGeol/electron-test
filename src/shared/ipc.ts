@@ -41,3 +41,17 @@ export type GeneratorGenerateResult = {
   markdown: string;
   grounding?: GroundingPayload;
 };
+
+export type ArticleSavePayload = {
+  markdown: string;
+  metadata: {
+    topic?: string;
+    imagePath?: string;
+    grounding?: GroundingPayload;
+  };
+};
+
+export type ArticleSaveResult = {
+  ok: boolean;
+  path: string;
+};

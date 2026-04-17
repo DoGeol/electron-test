@@ -1,36 +1,25 @@
 import {
-  ChevronDown,
-  ChevronUp,
   Copy,
   FileText,
   FolderOpen,
   KeyRound,
   Link2,
-  MousePointer2,
   PenSquare,
   Save,
   Settings,
   Sparkles,
-  Trash2,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { BlockNoteViewRaw as BlockNoteView, useCreateBlockNote } from '@blocknote/react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { BridgeApi } from '../../preload/bridge';
+import type { GroundingPayload } from '../../shared/ipc';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
 import { Label } from './components/ui/label';
 import { Textarea } from './components/ui/textarea';
+import '@blocknote/react/style.css';
 
 type Page = 'generator' | 'settings';
-
-const mockBlocks = [
-  { id: 'b1', kind: '제목', text: '2026년 봄 제주 가족여행, 2박 3일 동선 가이드' },
-  {
-    id: 'b2',
-    kind: '문단',
-    text: '첫째 날은 동선이 짧은 동부권으로 묶어 이동 시간을 줄이고, 아이와 함께 가기 좋은 실내 장소를 오전에 배치하는 구성을 추천합니다.',
-  },
-  { id: 'b3', kind: '목록', text: '• 오전: 아쿠아리움\n• 점심: 함덕 해변 인근\n• 오후: 해안 산책 + 카페' },
-];
 
 const navItems: Array<{ key: Page; label: string; icon: typeof FileText }> = [
   { key: 'generator', label: '글 생성', icon: FileText },
@@ -68,6 +57,8 @@ function resolveBridge(): BridgeApi {
 
 export default function App() {
   const bridge = useMemo(() => resolveBridge(), []);
+  const editor = useCreateBlockNote();
+  const syncingEditorRef = useRef(false);
   const [page, setPage] = useState<Page>('generator');
   const [topic, setTopic] = useState('');
   const [imageName, setImageName] = useState('');
@@ -81,6 +72,8 @@ export default function App() {
   const [generatedMarkdown, setGeneratedMarkdown] = useState('');
   const [generateNotice, setGenerateNotice] = useState('');
   const [groundingSummary, setGroundingSummary] = useState('');
+  const [saveNotice, setSaveNotice] = useState('');
+  const [lastGrounding, setLastGrounding] = useState<GroundingPayload | undefined>(undefined);
 
   const generateDisabled = useMemo(() => topic.trim().length === 0 || isGenerating, [isGenerating, topic]);
   const pageTitle = page === 'generator' ? '블로그 글 생성' : '설정';
@@ -129,6 +122,7 @@ export default function App() {
 
   const handleGenerate = useCallback(async () => {
     setGenerateNotice('');
+    setSaveNotice('');
     setIsGenerating(true);
 
     try {
@@ -138,6 +132,7 @@ export default function App() {
       });
 
       setGeneratedMarkdown(result.markdown);
+      setLastGrounding(result.grounding);
       const sourceCount = result.grounding?.sources.length ?? 0;
       setGroundingSummary(sourceCount > 0 ? `검색 출처 ${sourceCount}건` : '검색 출처 없음');
       setGenerateNotice('글 생성이 완료되었습니다.');
@@ -149,11 +144,75 @@ export default function App() {
     }
   }, [bridge, imagePath, topic]);
 
+  const syncEditorWithMarkdown = useCallback(
+    (markdown: string) => {
+      const normalized = markdown.trim();
+      if (!normalized) {
+        return;
+      }
+
+      const parsedBlocks = editor.tryParseMarkdownToBlocks(normalized);
+      if (parsedBlocks.length === 0) {
+        return;
+      }
+
+      syncingEditorRef.current = true;
+      const currentBlockIds = editor.document.map((block) => block.id);
+      if (currentBlockIds.length > 0) {
+        editor.replaceBlocks(currentBlockIds, parsedBlocks);
+      }
+      queueMicrotask(() => {
+        syncingEditorRef.current = false;
+      });
+    },
+    [editor]
+  );
+
+  const handleEditorChange = useCallback(() => {
+    if (syncingEditorRef.current) {
+      return;
+    }
+
+    const markdown = editor.blocksToMarkdownLossy().trim();
+    setGeneratedMarkdown(markdown);
+  }, [editor]);
+
+  const handleSaveArticle = useCallback(async () => {
+    setSaveNotice('');
+
+    const markdown = editor.blocksToMarkdownLossy().trim();
+    if (!markdown) {
+      setSaveNotice('저장할 본문이 없습니다. 글을 생성하거나 편집해주세요.');
+      return;
+    }
+
+    try {
+      const result = await bridge.article.save({
+        markdown,
+        metadata: {
+          topic: topic.trim(),
+          imagePath,
+          grounding: lastGrounding,
+        },
+      });
+      setSaveNotice(`저장이 완료되었습니다: ${result.path}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '저장에 실패했습니다.';
+      setSaveNotice(message);
+    }
+  }, [bridge, editor, imagePath, lastGrounding, topic]);
+
   useEffect(() => {
     if (page === 'settings') {
       void loadSettings();
     }
   }, [loadSettings, page]);
+
+  useEffect(() => {
+    if (generatedMarkdown.trim().length > 0) {
+      syncEditorWithMarkdown(generatedMarkdown);
+    }
+  }, [generatedMarkdown, syncEditorWithMarkdown]);
 
   return (
     <div className="h-full w-full bg-[var(--bg)] text-[var(--text)]">
@@ -249,42 +308,16 @@ export default function App() {
                   <section className="overflow-hidden rounded-md border border-[var(--border)] bg-[var(--surface)]">
                     <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
                       <h3 className="text-base font-semibold">생성된 글 본문</h3>
-                      <p className="text-xs text-[var(--text-muted)]">문단 hover 시 플로팅 액션 표시</p>
+                      <p className="text-xs text-[var(--text-muted)]">BlockNote 편집기</p>
                     </div>
                     {generatedMarkdown ? (
                       <article className="border-b border-[var(--border)] px-4 py-4">
                         <pre className="whitespace-pre-wrap text-sm leading-6">{generatedMarkdown}</pre>
                       </article>
                     ) : null}
-                    {mockBlocks.map((block) => (
-                      <article key={block.id} className="group grid grid-cols-[1fr_auto] gap-3 border-b border-[var(--border)] px-4 py-4 last:border-b-0">
-                        <div className="space-y-2">
-                          <span className="inline-flex h-6 items-center rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2 text-xs text-[var(--text-muted)]">
-                            {block.kind}
-                          </span>
-                          <p className="whitespace-pre-line text-sm leading-6">{block.text}</p>
-                        </div>
-                        <div className="flex items-start">
-                          <div className="flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--surface-2)] p-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-                            <Button variant="ghost" size="icon" title="선택">
-                              <MousePointer2 className="size-3.5" />
-                            </Button>
-                            <Button variant="ghost" size="icon" title="위로 이동">
-                              <ChevronUp className="size-3.5" />
-                            </Button>
-                            <Button variant="ghost" size="icon" title="아래로 이동">
-                              <ChevronDown className="size-3.5" />
-                            </Button>
-                            <Button variant="ghost" size="icon" title="복사">
-                              <Copy className="size-3.5" />
-                            </Button>
-                            <Button variant="danger" size="icon" title="삭제">
-                              <Trash2 className="size-3.5" />
-                            </Button>
-                          </div>
-                        </div>
-                      </article>
-                    ))}
+                    <div className="p-4">
+                      <BlockNoteView editor={editor} onChange={handleEditorChange} />
+                    </div>
                   </section>
 
                   <aside className="space-y-4 rounded-md border border-[var(--border)] bg-[var(--surface)] p-4">
@@ -301,10 +334,11 @@ export default function App() {
                       <FileText className="size-4" />
                       Markdown 복사
                     </Button>
-                    <Button className="w-full justify-start">
+                    <Button className="w-full justify-start" onClick={handleSaveArticle}>
                       <Save className="size-4" />
                       저장
                     </Button>
+                    {saveNotice ? <p className="text-xs text-[var(--text-muted)]">{saveNotice}</p> : null}
                     <div className="border-t border-[var(--border)] pt-3">
                       <p className="mb-2 text-xs font-semibold text-[var(--text-muted)]">출처</p>
                       {groundingSummary ? <p className="mb-2 text-xs text-[var(--text-muted)]">{groundingSummary}</p> : null}

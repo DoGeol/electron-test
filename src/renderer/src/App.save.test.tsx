@@ -22,7 +22,7 @@ type BridgeMock = {
   };
 };
 
-function createBridgeMock(overrides?: Partial<BridgeMock['generator']>): BridgeMock {
+function createBridgeMock(overrides?: Partial<BridgeMock['article']>): BridgeMock {
   return {
     settings: {
       get: vi.fn(async () => ({
@@ -42,10 +42,10 @@ function createBridgeMock(overrides?: Partial<BridgeMock['generator']>): BridgeM
           sources: [{ title: '공식 관광 사이트', uri: 'https://example.com/jeju' }],
         },
       })),
-      ...overrides,
     },
     article: {
-      save: vi.fn(async () => ({ ok: true, path: '/tmp/article' })),
+      save: vi.fn(async () => ({ ok: true, path: '/tmp/blog-output/2026-04-17-jeju' })),
+      ...overrides,
     },
     clipboard: {
       copyNaver: vi.fn(async () => ({ ok: true })),
@@ -55,48 +55,32 @@ function createBridgeMock(overrides?: Partial<BridgeMock['generator']>): BridgeM
   };
 }
 
-function createUploadFile(name: string, type: string, path: string): File {
-  const file = new File(['image-bytes'], name, { type });
-  Object.defineProperty(file, 'path', {
-    value: path,
-    writable: false,
-  });
-  return file;
-}
-
-describe('App generator integration', () => {
+describe('App manual save integration', () => {
   beforeEach(() => {
     (window as unknown as { bridge: BridgeMock }).bridge = createBridgeMock();
   });
 
-  it('runs generate flow and renders markdown result', async () => {
+  it('saves generated article when save button is clicked', async () => {
     const bridge = createBridgeMock();
     (window as unknown as { bridge: BridgeMock }).bridge = bridge;
 
     render(<App />);
 
     fireEvent.change(screen.getByLabelText('주제'), { target: { value: '제주 2박 3일 여행 코스' } });
-    fireEvent.change(screen.getByLabelText('참고 이미지 업로드'), {
-      target: { files: [createUploadFile('cover.png', 'image/png', '/tmp/cover.png')] },
-    });
     fireEvent.click(screen.getByRole('button', { name: 'AI 글 생성' }));
 
-    await waitFor(() => {
-      expect(bridge.generator.generate).toHaveBeenCalledWith({
-        topic: '제주 2박 3일 여행 코스',
-        imagePath: '/tmp/cover.png',
-      });
-    });
+    await screen.findByText('글 생성이 완료되었습니다.');
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
 
-    expect(await screen.findByText('글 생성이 완료되었습니다.')).toBeInTheDocument();
-    expect(screen.getAllByText(/생성된 블로그 글/).length).toBeGreaterThan(0);
-    expect(screen.getByText('검색 출처 1건')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(bridge.article.save).toHaveBeenCalled();
+    });
   });
 
-  it('shows failure message when generate call fails', async () => {
+  it('shows save error message when save fails', async () => {
     const bridge = createBridgeMock({
-      generate: vi.fn(async () => {
-        throw new Error('API 키가 설정되지 않았습니다.');
+      save: vi.fn(async () => {
+        throw new Error('저장 경로가 설정되지 않았습니다.');
       }),
     });
     (window as unknown as { bridge: BridgeMock }).bridge = bridge;
@@ -105,7 +89,10 @@ describe('App generator integration', () => {
 
     fireEvent.change(screen.getByLabelText('주제'), { target: { value: '서울 전시 추천' } });
     fireEvent.click(screen.getByRole('button', { name: 'AI 글 생성' }));
+    await screen.findByText('글 생성이 완료되었습니다.');
 
-    expect(await screen.findByText('API 키가 설정되지 않았습니다.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    expect(await screen.findByText('저장 경로가 설정되지 않았습니다.')).toBeInTheDocument();
   });
 });

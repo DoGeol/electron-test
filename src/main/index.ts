@@ -1,6 +1,8 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import Store from 'electron-store';
 import { join } from 'node:path';
+import { registerArticleIpcHandlers } from './article/ipc';
+import { createArticleSaveService } from './article/save-service';
 import { registerGeneratorIpcHandlers } from './generator/ipc';
 import { createGeneratorService } from './generator/generator-service';
 import { registerSettingsIpcHandlers } from './settings/ipc';
@@ -58,6 +60,7 @@ app.whenReady().then(() => {
       },
     },
   });
+  const articleSaveService = createArticleSaveService();
 
   registerSettingsIpcHandlers({
     ipcMain,
@@ -68,6 +71,11 @@ app.whenReady().then(() => {
     ipcMain,
     settingsService,
     generatorService,
+  });
+  registerArticleIpcHandlers({
+    ipcMain,
+    settingsService,
+    articleSaveService,
   });
 
   createWindow();
