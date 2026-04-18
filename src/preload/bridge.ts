@@ -17,7 +17,7 @@ export function createBridgeApi(ipcRenderer: Pick<IpcRenderer, 'invoke'>) {
       get: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGet) as Promise<SettingsPayload>,
       update: (payload: UpdateSettingsPayload) => ipcRenderer.invoke(IPC_CHANNELS.settingsUpdate, payload) as Promise<void>,
       testApiKey: (apiKey?: string) => ipcRenderer.invoke(IPC_CHANNELS.settingsTestApiKey, apiKey) as Promise<{ ok: boolean; message: string }>,
-      selectOutputPath: () => ipcRenderer.invoke(IPC_CHANNELS.settingsSelectOutputPath) as Promise<string | null>,
+      chooseOutputPath: () => ipcRenderer.invoke(IPC_CHANNELS.settingsChooseOutputPath) as Promise<string | null>,
     },
     generator: {
       generate: (payload: GeneratorGeneratePayload) =>

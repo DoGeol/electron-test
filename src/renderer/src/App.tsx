@@ -33,9 +33,13 @@ const FALLBACK_BRIDGE: BridgeApi = {
       promptMarkdown: '## 출력 형식\n- Markdown만 반환\n- 제목, 본문, 태그 포함',
       outputPath: '',
     }),
-    update: async () => undefined,
+    update: async () => {
+      throw new Error('설정 저장 기능은 데스크톱 앱에서만 사용할 수 있습니다.');
+    },
     testApiKey: async () => ({ ok: false, message: '설정 저장 기능은 데스크톱 앱에서 사용할 수 있습니다.' }),
-    selectOutputPath: async () => null,
+    chooseOutputPath: async () => {
+      throw new Error('저장 경로 선택 기능은 데스크톱 앱에서만 사용할 수 있습니다.');
+    },
   },
   generator: {
     generate: async () => ({ markdown: '', grounding: undefined }),
@@ -59,6 +63,8 @@ export default function App() {
   const bridge = useMemo(() => resolveBridge(), []);
   const editor = useCreateBlockNote();
   const syncingEditorRef = useRef(false);
+  const settingsLoadRequestIdRef = useRef(0);
+  const settingsEditVersionRef = useRef(0);
   const [page, setPage] = useState<Page>('generator');
   const [topic, setTopic] = useState('');
   const [imageName, setImageName] = useState('');
@@ -83,9 +89,23 @@ export default function App() {
       ? '주제와 참고 이미지를 기반으로 AI 초안을 만들고 문단 단위로 편집합니다.'
       : 'API 키, 기본 프롬프트, 결과 저장 경로를 로컬에서 관리합니다.';
 
+  const markSettingsEdited = useCallback(() => {
+    settingsEditVersionRef.current += 1;
+  }, []);
+
   const loadSettings = useCallback(async () => {
+    const requestId = settingsLoadRequestIdRef.current + 1;
+    settingsLoadRequestIdRef.current = requestId;
+    const editVersionAtRequest = settingsEditVersionRef.current;
+
     try {
       const settings = await bridge.settings.get();
+      const isStaleRequest = settingsLoadRequestIdRef.current !== requestId;
+      const hasUserEditSinceRequest = settingsEditVersionRef.current !== editVersionAtRequest;
+      if (isStaleRequest || hasUserEditSinceRequest) {
+        return;
+      }
+
       setApiKey(settings.apiKeyMasked);
       setPromptMarkdown(settings.promptMarkdown);
       setOutputPath(settings.outputPath);
@@ -102,24 +122,25 @@ export default function App() {
         promptMarkdown,
         outputPath,
       });
-      await loadSettings();
+      setApiKeyDirty(false);
       setSettingsNotice('설정을 저장했습니다.');
     } catch {
       setSettingsNotice('설정 저장에 실패했습니다.');
     }
-  }, [apiKey, apiKeyDirty, bridge, loadSettings, outputPath, promptMarkdown]);
+  }, [apiKey, apiKeyDirty, bridge, outputPath, promptMarkdown]);
 
   const handleTestApiKey = useCallback(async () => {
     const result = await bridge.settings.testApiKey(apiKeyDirty ? apiKey : undefined);
     setSettingsNotice(result.message);
   }, [apiKey, apiKeyDirty, bridge]);
 
-  const handleSelectOutputPath = useCallback(async () => {
+  const handleChooseOutputPath = useCallback(async () => {
     setSettingsNotice('저장 경로 선택 창을 여는 중입니다.');
 
     try {
-      const selectedPath = await bridge.settings.selectOutputPath();
+      const selectedPath = await bridge.settings.chooseOutputPath();
       if (selectedPath) {
+        markSettingsEdited();
         setOutputPath(selectedPath);
         setSettingsNotice('저장 경로를 선택했습니다. 설정 저장을 눌러 적용해주세요.');
         return;
@@ -129,7 +150,7 @@ export default function App() {
     } catch {
       setSettingsNotice('저장 경로 선택 창을 열지 못했습니다.');
     }
-  }, [bridge]);
+  }, [bridge, markSettingsEdited]);
 
   const handleGenerate = useCallback(async () => {
     setGenerateNotice('');
@@ -435,6 +456,7 @@ export default function App() {
                     type="password"
                     value={apiKey}
                     onChange={(event) => {
+                      markSettingsEdited();
                       setApiKey(event.target.value);
                       setApiKeyDirty(true);
                     }}
@@ -449,7 +471,10 @@ export default function App() {
                     id="prompt-markdown"
                     className="min-h-44 font-mono leading-6"
                     value={promptMarkdown}
-                    onChange={(event) => setPromptMarkdown(event.target.value)}
+                    onChange={(event) => {
+                      markSettingsEdited();
+                      setPromptMarkdown(event.target.value);
+                    }}
                   />
                 </div>
 
@@ -460,12 +485,15 @@ export default function App() {
                     <Input
                       id="output-path"
                       value={outputPath}
-                      onChange={(event) => setOutputPath(event.target.value)}
+                      onChange={(event) => {
+                        markSettingsEdited();
+                        setOutputPath(event.target.value);
+                      }}
                       placeholder="/Users/you/Documents/blog-output"
                     />
-                    <Button variant="secondary" className="shrink-0" onClick={handleSelectOutputPath}>
+                    <Button variant="secondary" className="shrink-0" onClick={handleChooseOutputPath}>
                       <FolderOpen className="size-4" />
-                      선택
+                      경로 탐색
                     </Button>
                   </div>
                 </div>

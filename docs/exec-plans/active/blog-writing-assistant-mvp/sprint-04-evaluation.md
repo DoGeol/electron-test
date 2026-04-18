@@ -14,7 +14,7 @@
 - Expected: Settings 관련 테스트를 먼저 추가하고 red 상태를 확인한 뒤 구현한다.
 - Actual: settings 관련 테스트(`settings-service`, `settings IPC`, `renderer settings integration`)를 먼저 추가한 뒤, 모듈 미구현 상태에서 red를 확인하고 구현을 진행했다.
 - Evidence:
-  - Initial red: `Cannot find module './settings-service'`, `Cannot find module './ipc'`, `settings.selectOutputPath` 누락
+  - Initial red: `Cannot find module './settings-service'`, `Cannot find module './ipc'`, `settings.chooseOutputPath` 누락
   - Final green: `Test Files 9 passed (9)`, `Tests 31 passed (31)`
 
 ### electron-store only persistence
@@ -31,7 +31,7 @@
 
 - Verdict: `PASS`
 - Expected: renderer가 `fs` 또는 `electron-store`를 직접 참조하지 않고 preload IPC만 사용한다.
-- Actual: settings 관련 동작은 `settings:get/update/testApiKey/selectOutputPath` IPC로 분리, preload bridge만 통해 접근.
+- Actual: settings 관련 동작은 `settings:get/update/testApiKey/chooseOutputPath` IPC로 분리, `chooseOutputPath`는 경로 선택만 반환하고 저장은 `settings:update`에서만 수행.
 - Evidence:
   - `src/shared/ipc.ts`
   - `src/preload/bridge.ts`

@@ -40,7 +40,7 @@ export function registerSettingsIpcHandlers({ ipcMain, settingsService, dialog, 
     settingsService.testApiKey(typeof apiKeyInput === 'string' ? apiKeyInput : undefined)
   );
 
-  ipcMain.handle(IPC_CHANNELS.settingsSelectOutputPath, async (event) => {
+  ipcMain.handle(IPC_CHANNELS.settingsChooseOutputPath, async (event) => {
     const options: OpenDialogOptions = {
       title: '저장 경로 선택',
       properties: ['openDirectory', 'createDirectory'],
@@ -54,6 +54,7 @@ export function registerSettingsIpcHandlers({ ipcMain, settingsService, dialog, 
     }
 
     const selectedPath = result.filePaths[0];
+    // Side-effect free contract: caller must persist with settings:update.
     return selectedPath;
   });
 }

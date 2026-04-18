@@ -38,7 +38,7 @@ describe('registerSettingsIpcHandlers', () => {
     expect(handlers.has(IPC_CHANNELS.settingsGet)).toBe(true);
     expect(handlers.has(IPC_CHANNELS.settingsUpdate)).toBe(true);
     expect(handlers.has(IPC_CHANNELS.settingsTestApiKey)).toBe(true);
-    expect(handlers.has(IPC_CHANNELS.settingsSelectOutputPath)).toBe(true);
+    expect(handlers.has(IPC_CHANNELS.settingsChooseOutputPath)).toBe(true);
 
     const getResult = await handlers.get(IPC_CHANNELS.settingsGet)?.();
     expect(getResult).toEqual({ apiKeyMasked: 'AIza****', promptMarkdown: '## prompt', outputPath: '/tmp/out' });
@@ -50,7 +50,7 @@ describe('registerSettingsIpcHandlers', () => {
     expect(testResult).toEqual({ ok: true, message: 'ok' });
     expect(settingsService.testApiKey).toHaveBeenCalledWith('AIza-input');
 
-    const selectedPath = await handlers.get(IPC_CHANNELS.settingsSelectOutputPath)?.({ sender: {} });
+    const selectedPath = await handlers.get(IPC_CHANNELS.settingsChooseOutputPath)?.({ sender: {} });
     expect(selectedPath).toBe('/tmp/selected');
     expect(browserWindow.fromWebContents).toHaveBeenCalled();
     expect(dialog.showOpenDialog).toHaveBeenCalledWith(parentWindow, {
@@ -85,7 +85,7 @@ describe('registerSettingsIpcHandlers', () => {
       },
     });
 
-    const selectedPath = await handlers.get(IPC_CHANNELS.settingsSelectOutputPath)?.({ sender: {} });
+    const selectedPath = await handlers.get(IPC_CHANNELS.settingsChooseOutputPath)?.({ sender: {} });
 
     expect(selectedPath).toBeNull();
     expect(settingsService.updateSettings).not.toHaveBeenCalled();

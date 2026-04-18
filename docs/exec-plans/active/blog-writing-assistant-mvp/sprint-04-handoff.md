@@ -3,8 +3,8 @@
 ## Completed in This Pass
 
 - Implemented settings persistence with `electron-store` in main process.
-- Added settings IPC handlers (`get`, `update`, `testApiKey`, `selectOutputPath`) and preload bridge wiring.
-- Connected renderer Settings 화면 to bridge load/save/test/select flows.
+- Added settings IPC handlers (`get`, `update`, `testApiKey`, `chooseOutputPath`) and preload bridge wiring.
+- Connected renderer Settings 화면 to bridge load/save/test/choose flows (`chooseOutputPath` + explicit save).
 - Added Sprint 4 test suite first, confirmed red, then green.
 
 ## Changed Files
@@ -33,7 +33,7 @@
 - `npm run typecheck` -> pass
 - `npm run build` -> pass
 - Red-first evidence:
-  - missing modules(`settings-service`, `ipc`) and missing bridge method(`settings.selectOutputPath`) 확인 후 구현
+  - missing modules(`settings-service`, `ipc`) and missing bridge method(`settings.chooseOutputPath`) 확인 후 구현
 
 ## Guardrails Preserved
 

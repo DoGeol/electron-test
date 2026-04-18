@@ -7,7 +7,7 @@ type BridgeMock = {
     get: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
     testApiKey: ReturnType<typeof vi.fn>;
-    selectOutputPath: ReturnType<typeof vi.fn>;
+    chooseOutputPath: ReturnType<typeof vi.fn>;
   };
   generator: {
     generate: ReturnType<typeof vi.fn>;
@@ -34,7 +34,7 @@ function createBridgeMock(overrides?: Partial<BridgeMock['settings']>): BridgeMo
       get: settingsGet,
       update: vi.fn(async () => undefined),
       testApiKey: vi.fn(async () => ({ ok: true, message: 'API 키 형식이 유효합니다.' })),
-      selectOutputPath: vi.fn(async () => null),
+      chooseOutputPath: vi.fn(async () => null),
       ...overrides,
     },
     generator: {
@@ -114,11 +114,15 @@ describe('App settings integration', () => {
         outputPath: '/tmp/changed',
       });
     });
+    expect(bridge.settings.get).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText('Gemini API 키')).toHaveValue('AIza-new-key');
+    expect(screen.getByLabelText('기본 프롬프트 (Markdown)')).toHaveValue('## 바뀐 프롬프트');
+    expect(screen.getByLabelText('저장 경로')).toHaveValue('/tmp/changed');
   });
 
   it('updates output path input when selecting folder', async () => {
     const bridge = createBridgeMock({
-      selectOutputPath: vi.fn(async () => '/tmp/selected-output'),
+      chooseOutputPath: vi.fn(async () => '/tmp/selected-output'),
     });
     (window as unknown as { bridge: BridgeMock }).bridge = bridge;
 
@@ -128,7 +132,7 @@ describe('App settings integration', () => {
       expect(screen.getByLabelText('저장 경로')).toHaveValue('/tmp/blog-output');
     });
 
-    fireEvent.click(screen.getByRole('button', { name: '선택' }));
+    fireEvent.click(screen.getByRole('button', { name: '경로 탐색' }));
 
     await waitFor(() => {
       expect(screen.getByLabelText('저장 경로')).toHaveValue('/tmp/selected-output');
@@ -136,9 +140,39 @@ describe('App settings integration', () => {
     expect(screen.getByText('저장 경로를 선택했습니다. 설정 저장을 눌러 적용해주세요.')).toBeInTheDocument();
   });
 
+  it('keeps selected output path when delayed settings load resolves later', async () => {
+    let resolveSettingsGet: ((value: { apiKeyMasked: string; promptMarkdown: string; outputPath: string }) => void) | undefined;
+    const settingsGetPromise = new Promise<{ apiKeyMasked: string; promptMarkdown: string; outputPath: string }>((resolve) => {
+      resolveSettingsGet = resolve;
+    });
+    const bridge = createBridgeMock({
+      get: vi.fn(async () => settingsGetPromise),
+      chooseOutputPath: vi.fn(async () => '/tmp/selected-output'),
+    });
+    (window as unknown as { bridge: BridgeMock }).bridge = bridge;
+
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: '설정' }));
+
+    fireEvent.click(screen.getByRole('button', { name: '경로 탐색' }));
+    await waitFor(() => {
+      expect(screen.getByLabelText('저장 경로')).toHaveValue('/tmp/selected-output');
+    });
+
+    resolveSettingsGet?.({
+      apiKeyMasked: 'AIza****',
+      promptMarkdown: '## 저장된 프롬프트',
+      outputPath: '/tmp/blog-output',
+    });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('저장 경로')).toHaveValue('/tmp/selected-output');
+    });
+  });
+
   it('saves selected output path without resetting it', async () => {
     const bridge = createStatefulBridgeMock({
-      selectOutputPath: vi.fn(async () => '/tmp/selected-output'),
+      chooseOutputPath: vi.fn(async () => '/tmp/selected-output'),
     });
     (window as unknown as { bridge: BridgeMock }).bridge = bridge;
 
@@ -146,7 +180,7 @@ describe('App settings integration', () => {
     fireEvent.click(screen.getByRole('button', { name: '설정' }));
     await screen.findByLabelText('저장 경로');
 
-    fireEvent.click(screen.getByRole('button', { name: '선택' }));
+    fireEvent.click(screen.getByRole('button', { name: '경로 탐색' }));
     await waitFor(() => {
       expect(screen.getByLabelText('저장 경로')).toHaveValue('/tmp/selected-output');
     });
@@ -164,7 +198,7 @@ describe('App settings integration', () => {
 
   it('shows notice when output path selection is canceled', async () => {
     const bridge = createBridgeMock({
-      selectOutputPath: vi.fn(async () => null),
+      chooseOutputPath: vi.fn(async () => null),
     });
     (window as unknown as { bridge: BridgeMock }).bridge = bridge;
 
@@ -172,14 +206,14 @@ describe('App settings integration', () => {
     fireEvent.click(screen.getByRole('button', { name: '설정' }));
     await screen.findByLabelText('저장 경로');
 
-    fireEvent.click(screen.getByRole('button', { name: '선택' }));
+    fireEvent.click(screen.getByRole('button', { name: '경로 탐색' }));
 
     expect(await screen.findByText('저장 경로 선택이 취소되었습니다.')).toBeInTheDocument();
   });
 
   it('shows error notice when output path selection fails', async () => {
     const bridge = createBridgeMock({
-      selectOutputPath: vi.fn(async () => {
+      chooseOutputPath: vi.fn(async () => {
         throw new Error('dialog failed');
       }),
     });
@@ -189,7 +223,7 @@ describe('App settings integration', () => {
     fireEvent.click(screen.getByRole('button', { name: '설정' }));
     await screen.findByLabelText('저장 경로');
 
-    fireEvent.click(screen.getByRole('button', { name: '선택' }));
+    fireEvent.click(screen.getByRole('button', { name: '경로 탐색' }));
 
     expect(await screen.findByText('저장 경로 선택 창을 열지 못했습니다.')).toBeInTheDocument();
   });

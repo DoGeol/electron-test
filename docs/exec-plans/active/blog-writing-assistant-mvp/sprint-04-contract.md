@@ -37,7 +37,7 @@
 - IPC contract should separate:
   - `settings:get`
   - `settings:update`
-  - `settings:selectOutputPath` (main dialog only)
+  - `settings:chooseOutputPath` (main dialog only, no persistence side effect)
 - Do not couple Settings persistence with article bundle save logic.
 
 ## Risks / Open Questions

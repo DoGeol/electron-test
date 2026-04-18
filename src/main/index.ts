@@ -8,6 +8,7 @@ import { registerGeneratorIpcHandlers } from './generator/ipc';
 import { createGeneratorService } from './generator/generator-service';
 import { registerSettingsIpcHandlers } from './settings/ipc';
 import { createSettingsService } from './settings/settings-service';
+import { resolvePreloadPath } from './preload-path';
 
 function createWindow() {
   const window = new BrowserWindow({
@@ -18,7 +19,7 @@ function createWindow() {
     show: false,
     autoHideMenuBar: true,
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
+      preload: resolvePreloadPath(__dirname),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,

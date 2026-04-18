@@ -7,7 +7,7 @@ type BridgeMock = {
     get: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
     testApiKey: ReturnType<typeof vi.fn>;
-    selectOutputPath: ReturnType<typeof vi.fn>;
+    chooseOutputPath: ReturnType<typeof vi.fn>;
   };
   generator: {
     generate: ReturnType<typeof vi.fn>;
@@ -32,7 +32,7 @@ function createBridgeMock(overrides?: Partial<BridgeMock['generator']>): BridgeM
       })),
       update: vi.fn(async () => undefined),
       testApiKey: vi.fn(async () => ({ ok: true, message: 'ok' })),
-      selectOutputPath: vi.fn(async () => null),
+      chooseOutputPath: vi.fn(async () => null),
     },
     generator: {
       generate: vi.fn(async () => ({

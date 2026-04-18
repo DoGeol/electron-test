@@ -12,7 +12,7 @@ describe('createBridgeApi', () => {
     expect(api).toHaveProperty('settings.get');
     expect(api).toHaveProperty('settings.update');
     expect(api).toHaveProperty('settings.testApiKey');
-    expect(api).toHaveProperty('settings.selectOutputPath');
+    expect(api).toHaveProperty('settings.chooseOutputPath');
     expect(api).toHaveProperty('generator.generate');
     expect(api).toHaveProperty('article.save');
     expect(api).toHaveProperty('clipboard.copyNaver');
@@ -29,5 +29,14 @@ describe('createBridgeApi', () => {
     await api.settings.get();
 
     expect(invoke).toHaveBeenCalledWith(IPC_CHANNELS.settingsGet);
+  });
+
+  it('routes to expected IPC channel for settings.chooseOutputPath', async () => {
+    const invoke = vi.fn(async () => null);
+    const api = createBridgeApi({ invoke });
+
+    await api.settings.chooseOutputPath();
+
+    expect(invoke).toHaveBeenCalledWith(IPC_CHANNELS.settingsChooseOutputPath);
   });
 });
