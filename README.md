@@ -1,6 +1,6 @@
 # Blog Writing Assistant
 
-Mac 로컬에서 사용하는 Electron 기반 블로그 글 작성 보조 앱입니다. 사용자는 주제와 참고 이미지를 입력하고, Gemini API의 Google Search Grounding을 통해 블로그 글 초안을 생성한 뒤, 문단 단위로 편집하고 네이버 블로그에 서식이 유지되도록 복사할 수 있습니다.
+Mac 로컬에서 사용하는 Electron 기반 블로그 글 작성 보조 앱입니다. 사용자는 주제와 참고 이미지를 입력하고, Gemini API의 Google Search Grounding을 통해 블로그 글 초안을 생성한 뒤, `---` 구분선 기준의 본문 블록 단위로 편집하고 네이버 블로그에 서식이 유지되도록 복사할 수 있습니다.
 
 ## 개요
 
@@ -10,8 +10,7 @@ Mac 로컬에서 사용하는 Electron 기반 블로그 글 작성 보조 앱입
 
 - 주제 입력, 참고 이미지 업로드, 글 생성 버튼으로 구성된 간단한 생성 플로우
 - Gemini API `gemini-2.5-flash` 모델과 Google Search Grounding 기반 글 생성
-- Notion처럼 문단/블록 단위로 작성 글 이동, 편집, 선택, 복사
-- 문단 hover 시 플로팅바를 통해 블록 액션 제공
+- `---` 구분선 기준 본문 블록 단위 클릭 편집, 드래그 앤 드롭 이동, 복사
 - 네이버 블로그에 붙여넣었을 때 형식을 유지하기 위한 HTML 클립보드 복사
 - 설정 화면에서 Gemini API Key, 생성 프롬프트, 저장 경로 관리
 - 생성 글과 메타데이터를 사용자가 지정한 로컬 경로에 저장
@@ -52,8 +51,8 @@ MVP 기준의 핵심 흐름이 구현되어 있습니다.
 
 - 설정 저장: API Key / 프롬프트 / 저장 경로(`electron-store`)
 - 글 생성: `gemini-2.5-flash` + Google Search Grounding(Non-streaming, 이미지 1장)
-- 편집: BlockNote 기반 문단 편집
-- 복사: 전체 글/선택 문단 네이버 HTML 복사 + Markdown 복사
+- 편집: BlockNote 기반 본문 블록 편집
+- 복사: 전체 글/본문 블록 네이버 HTML 복사 + 마크다운 복사(사진 자리표시자 제외)
 - 저장: 수동 저장 버튼 기반 article bundle 생성
 
 ## 개발 환경

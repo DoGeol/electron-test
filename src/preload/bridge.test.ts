@@ -18,6 +18,7 @@ describe('createBridgeApi', () => {
     expect(api).toHaveProperty('clipboard.copyNaver');
     expect(api).toHaveProperty('clipboard.copyMarkdown');
     expect(api).toHaveProperty('clipboard.copySelectionNaver');
+    expect(api).toHaveProperty('files.getPathForFile');
     expect(api).not.toHaveProperty('fs');
     expect(api).not.toHaveProperty('electronStore');
   });
@@ -38,5 +39,16 @@ describe('createBridgeApi', () => {
     await api.settings.chooseOutputPath();
 
     expect(invoke).toHaveBeenCalledWith(IPC_CHANNELS.settingsChooseOutputPath);
+  });
+
+  it('resolves file paths through the provided Electron file resolver without IPC', () => {
+    const invoke = vi.fn(async () => null);
+    const file = new File(['image-bytes'], 'cover.png', { type: 'image/png' });
+    const getPathForFile = vi.fn(() => '/tmp/cover.png');
+    const api = createBridgeApi({ invoke }, { getPathForFile });
+
+    expect(api.files.getPathForFile(file)).toBe('/tmp/cover.png');
+    expect(getPathForFile).toHaveBeenCalledWith(file);
+    expect(invoke).not.toHaveBeenCalled();
   });
 });

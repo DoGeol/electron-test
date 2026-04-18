@@ -27,8 +27,12 @@ function isCodeFence(line: string): boolean {
   return line.trim().startsWith('```');
 }
 
+function isDividerLine(line: string): boolean {
+  return /^(?:-{3,}|\*{3,}|_{3,})$/.test(line.trim());
+}
+
 function startsNewBlock(line: string): boolean {
-  return isHeadingLine(line) || isImageLine(line) || isListLine(line) || isQuoteLine(line) || isCodeFence(line);
+  return isHeadingLine(line) || isImageLine(line) || isListLine(line) || isQuoteLine(line) || isCodeFence(line) || isDividerLine(line);
 }
 
 function nextBlockId(index: number): string {
@@ -111,6 +115,9 @@ function blockToMarkdown(block: ArticleBlock): string {
       const { alt, url } = toImageContent(block.content);
       return `![${alt}](${url})`;
     }
+    case 'divider': {
+      return '---';
+    }
     default:
       return '';
   }
@@ -133,6 +140,17 @@ export function markdownToArticleDocument(markdown: string): ArticleDocument {
     const trimmedLine = rawLine.trim();
 
     if (trimmedLine.length === 0) {
+      cursor += 1;
+      continue;
+    }
+
+    if (isDividerLine(trimmedLine)) {
+      blocks.push({
+        id: nextBlockId(blocks.length),
+        type: 'divider',
+        content: {},
+        order: blocks.length,
+      });
       cursor += 1;
       continue;
     }

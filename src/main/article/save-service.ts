@@ -2,6 +2,7 @@ import { copyFile, mkdir, writeFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { convert } from '@jjlabsio/md-to-naver-blog';
 import { markdownToArticleDocument } from '../../shared/domain/markdown';
+import { normalizeMarkdownDividers } from '../../shared/domain/section';
 import type { ArticleSavePayload, ArticleSaveResult } from '../../shared/ipc';
 
 type FileSystemLike = {
@@ -61,7 +62,7 @@ export function createArticleSaveService({
   return {
     async saveArticle({ outputPath, markdown, metadata }: SaveInput): Promise<ArticleSaveResult> {
       const normalizedOutputPath = outputPath.trim();
-      const normalizedMarkdown = markdown.trim();
+      const normalizedMarkdown = normalizeMarkdownDividers(markdown.trim());
 
       if (!normalizedOutputPath) {
         throw new Error('저장 경로가 설정되지 않았습니다. 설정에서 저장 경로를 먼저 지정해주세요.');

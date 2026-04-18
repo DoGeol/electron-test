@@ -36,7 +36,7 @@ function createBridgeMock(overrides?: Partial<BridgeMock['clipboard']>): BridgeM
     },
     generator: {
       generate: vi.fn(async () => ({
-        markdown: '# 생성된 블로그 글\n\n본문 내용',
+        markdown: '# 생성된 블로그 글\n\n*(사진 1)*\n\n첫 본문 내용\n\n---\n\n## 두번째 블록\n\n![사진](https://example.com/a.png)\n\n둘째 본문 내용',
         grounding: {
           webSearchQueries: ['제주 여행'],
           sources: [{ title: '공식 관광 사이트', uri: 'https://example.com/jeju' }],
@@ -73,7 +73,9 @@ describe('App clipboard integration', () => {
     fireEvent.click(screen.getByRole('button', { name: '전체 글 네이버 복사' }));
 
     await waitFor(() => {
-      expect(bridge.clipboard.copyNaver).toHaveBeenCalled();
+      expect(bridge.clipboard.copyNaver).toHaveBeenCalledWith(
+        ['# 생성된 블로그 글', '', '첫 본문 내용', '', '---', '', '## 두번째 블록', '', '둘째 본문 내용'].join('\n')
+      );
     });
     expect(await screen.findByText('전체 글을 네이버 형식으로 복사했습니다.')).toBeInTheDocument();
   });
@@ -88,15 +90,17 @@ describe('App clipboard integration', () => {
     fireEvent.click(screen.getByRole('button', { name: 'AI 글 생성' }));
     await screen.findByText('글 생성이 완료되었습니다.');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Markdown 복사' }));
+    fireEvent.click(screen.getByRole('button', { name: '전체 마크다운 복사' }));
 
     await waitFor(() => {
-      expect(bridge.clipboard.copyMarkdown).toHaveBeenCalled();
+      expect(bridge.clipboard.copyMarkdown).toHaveBeenCalledWith(
+        ['# 생성된 블로그 글', '', '첫 본문 내용', '', '---', '', '## 두번째 블록', '', '둘째 본문 내용'].join('\n')
+      );
     });
-    expect(await screen.findByText('Markdown을 복사했습니다.')).toBeInTheDocument();
+    expect(await screen.findByText('마크다운을 복사했습니다.')).toBeInTheDocument();
   });
 
-  it('shows warning when no paragraph is selected', async () => {
+  it('copies a single article block as markdown', async () => {
     const bridge = createBridgeMock();
     (window as unknown as { bridge: BridgeMock }).bridge = bridge;
 
@@ -106,9 +110,90 @@ describe('App clipboard integration', () => {
     fireEvent.click(screen.getByRole('button', { name: 'AI 글 생성' }));
     await screen.findByText('글 생성이 완료되었습니다.');
 
-    fireEvent.click(screen.getByRole('button', { name: '선택 문단 복사' }));
+    fireEvent.click(screen.getAllByRole('button', { name: '마크다운 복사' })[0]);
 
-    expect(await screen.findByText('선택된 문단이 없습니다. 복사할 문단을 먼저 선택해주세요.')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(bridge.clipboard.copyMarkdown).toHaveBeenCalledWith('# 생성된 블로그 글\n\n첫 본문 내용');
+    });
+    expect(await screen.findByText('본문 블록 1번 마크다운을 복사했습니다.')).toBeInTheDocument();
+  });
+
+  it('copies a single article block as naver html', async () => {
+    const bridge = createBridgeMock();
+    (window as unknown as { bridge: BridgeMock }).bridge = bridge;
+
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText('주제'), { target: { value: '부산 카페 투어' } });
+    fireEvent.click(screen.getByRole('button', { name: 'AI 글 생성' }));
+    await screen.findByText('글 생성이 완료되었습니다.');
+
+    fireEvent.click(screen.getAllByRole('button', { name: '네이버 복사' })[1]);
+
+    await waitFor(() => {
+      expect(bridge.clipboard.copySelectionNaver).toHaveBeenCalledWith('## 두번째 블록\n\n둘째 본문 내용');
+    });
+    expect(await screen.findByText('본문 블록 2번을 네이버 형식으로 복사했습니다.')).toBeInTheDocument();
+  });
+
+  it('guards selected paragraph copy when no editor paragraph is selected', async () => {
+    const bridge = createBridgeMock();
+    (window as unknown as { bridge: BridgeMock }).bridge = bridge;
+
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText('주제'), { target: { value: '부산 카페 투어' } });
+    fireEvent.click(screen.getByRole('button', { name: 'AI 글 생성' }));
+    await screen.findByText('글 생성이 완료되었습니다.');
+
+    fireEvent.click(screen.getByRole('button', { name: '블록 1 편집' }));
+    fireEvent.click(screen.getByRole('button', { name: '선택 문단 네이버 복사' }));
+
     expect(bridge.clipboard.copySelectionNaver).not.toHaveBeenCalled();
+    expect(await screen.findByText('선택된 문단이 없습니다. 복사할 문단을 먼저 선택해주세요.')).toBeInTheDocument();
+  });
+
+  it('copies and deletes multiple selected article blocks', async () => {
+    const bridge = createBridgeMock();
+    (window as unknown as { bridge: BridgeMock }).bridge = bridge;
+
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText('주제'), { target: { value: '부산 카페 투어' } });
+    fireEvent.click(screen.getByRole('button', { name: 'AI 글 생성' }));
+    await screen.findByText('글 생성이 완료되었습니다.');
+
+    fireEvent.click(screen.getByLabelText('블록 1 선택'));
+    fireEvent.click(screen.getByLabelText('블록 2 선택'));
+    fireEvent.click(screen.getByRole('button', { name: '선택 블록 네이버 복사' }));
+
+    await waitFor(() => {
+      expect(bridge.clipboard.copySelectionNaver).toHaveBeenCalledWith(
+        ['# 생성된 블로그 글', '', '첫 본문 내용', '', '---', '', '## 두번째 블록', '', '둘째 본문 내용'].join('\n')
+      );
+    });
+    expect(await screen.findByText('선택 블록을 네이버 형식으로 복사했습니다.')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '선택 블록 삭제' }));
+
+    expect(await screen.findByText('선택 블록을 삭제했습니다.')).toBeInTheDocument();
+    expect(screen.getByText('생성된 본문이 없습니다.')).toBeInTheDocument();
+  });
+
+  it('activates inline editing by clicking a block preview without rendering edit buttons', async () => {
+    const bridge = createBridgeMock();
+    (window as unknown as { bridge: BridgeMock }).bridge = bridge;
+
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText('주제'), { target: { value: '부산 카페 투어' } });
+    fireEvent.click(screen.getByRole('button', { name: 'AI 글 생성' }));
+    await screen.findByText('글 생성이 완료되었습니다.');
+
+    expect(screen.queryByRole('button', { name: '편집' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '블록 1 편집' }));
+
+    expect(screen.queryByRole('button', { name: '블록 1 편집' })).not.toBeInTheDocument();
   });
 });

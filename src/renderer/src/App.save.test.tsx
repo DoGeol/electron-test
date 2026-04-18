@@ -36,7 +36,7 @@ function createBridgeMock(overrides?: Partial<BridgeMock['article']>): BridgeMoc
     },
     generator: {
       generate: vi.fn(async () => ({
-        markdown: '# 생성된 블로그 글\n\n본문 내용',
+        markdown: '# 생성된 블로그 글\n\n*(사진 1)*\n\n첫 본문 내용\n\n---\n\n## 두번째 블록\n\n![사진](https://example.com/a.png)\n\n둘째 본문 내용',
         grounding: {
           webSearchQueries: ['제주 여행'],
           sources: [{ title: '공식 관광 사이트', uri: 'https://example.com/jeju' }],
@@ -52,6 +52,18 @@ function createBridgeMock(overrides?: Partial<BridgeMock['article']>): BridgeMoc
       copyMarkdown: vi.fn(async () => ({ ok: true })),
       copySelectionNaver: vi.fn(async () => ({ ok: true })),
     },
+  };
+}
+
+function createDataTransfer() {
+  const data = new Map<string, string>();
+  return {
+    dropEffect: 'move',
+    effectAllowed: 'move',
+    getData: vi.fn((type: string) => data.get(type) ?? ''),
+    setData: vi.fn((type: string, value: string) => {
+      data.set(type, value);
+    }),
   };
 }
 
@@ -74,6 +86,51 @@ describe('App manual save integration', () => {
 
     await waitFor(() => {
       expect(bridge.article.save).toHaveBeenCalled();
+    });
+  });
+
+  it('saves moved article blocks in the visible order after drag and drop', async () => {
+    const bridge = createBridgeMock();
+    (window as unknown as { bridge: BridgeMock }).bridge = bridge;
+
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText('주제'), { target: { value: '제주 2박 3일 여행 코스' } });
+    fireEvent.click(screen.getByRole('button', { name: 'AI 글 생성' }));
+    await screen.findByText('글 생성이 완료되었습니다.');
+
+    const dataTransfer = createDataTransfer();
+    fireEvent.dragStart(screen.getByRole('button', { name: '블록 1 드래그 이동' }), { dataTransfer });
+    fireEvent.dragOver(screen.getByRole('button', { name: '블록 2 편집' }), { dataTransfer });
+    fireEvent.drop(screen.getByRole('button', { name: '블록 2 편집' }), { dataTransfer });
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    await waitFor(() => {
+      expect(bridge.article.save).toHaveBeenCalledWith({
+        markdown: [
+          '## 두번째 블록',
+          '',
+          '![사진](https://example.com/a.png)',
+          '',
+          '둘째 본문 내용',
+          '',
+          '---',
+          '',
+          '# 생성된 블로그 글',
+          '',
+          '*(사진 1)*',
+          '',
+          '첫 본문 내용',
+        ].join('\n'),
+        metadata: {
+          topic: '제주 2박 3일 여행 코스',
+          imagePath: undefined,
+          grounding: {
+            webSearchQueries: ['제주 여행'],
+            sources: [{ title: '공식 관광 사이트', uri: 'https://example.com/jeju' }],
+          },
+        },
+      });
     });
   });
 

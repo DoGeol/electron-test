@@ -20,6 +20,9 @@ type BridgeMock = {
     copyMarkdown: ReturnType<typeof vi.fn>;
     copySelectionNaver: ReturnType<typeof vi.fn>;
   };
+  files: {
+    getPathForFile: ReturnType<typeof vi.fn>;
+  };
 };
 
 function createBridgeMock(overrides?: Partial<BridgeMock['generator']>): BridgeMock {
@@ -36,7 +39,7 @@ function createBridgeMock(overrides?: Partial<BridgeMock['generator']>): BridgeM
     },
     generator: {
       generate: vi.fn(async () => ({
-        markdown: '# 생성된 블로그 글\n\n본문 내용',
+        markdown: '# 생성된 블로그 글\n\n첫 본문 내용\n\n---\n\n## 두번째 블록\n\n둘째 본문 내용',
         grounding: {
           webSearchQueries: ['제주 여행'],
           sources: [{ title: '공식 관광 사이트', uri: 'https://example.com/jeju' }],
@@ -52,16 +55,14 @@ function createBridgeMock(overrides?: Partial<BridgeMock['generator']>): BridgeM
       copyMarkdown: vi.fn(async () => ({ ok: true })),
       copySelectionNaver: vi.fn(async () => ({ ok: true })),
     },
+    files: {
+      getPathForFile: vi.fn(() => '/tmp/cover.png'),
+    },
   };
 }
 
-function createUploadFile(name: string, type: string, path: string): File {
-  const file = new File(['image-bytes'], name, { type });
-  Object.defineProperty(file, 'path', {
-    value: path,
-    writable: false,
-  });
-  return file;
+function createUploadFile(name: string, type: string): File {
+  return new File(['image-bytes'], name, { type });
 }
 
 describe('App generator integration', () => {
@@ -77,11 +78,12 @@ describe('App generator integration', () => {
 
     fireEvent.change(screen.getByLabelText('주제'), { target: { value: '제주 2박 3일 여행 코스' } });
     fireEvent.change(screen.getByLabelText('참고 이미지 업로드'), {
-      target: { files: [createUploadFile('cover.png', 'image/png', '/tmp/cover.png')] },
+      target: { files: [createUploadFile('cover.png', 'image/png')] },
     });
     fireEvent.click(screen.getByRole('button', { name: 'AI 글 생성' }));
 
     await waitFor(() => {
+      expect(bridge.files.getPathForFile).toHaveBeenCalledWith(expect.objectContaining({ name: 'cover.png' }));
       expect(bridge.generator.generate).toHaveBeenCalledWith({
         topic: '제주 2박 3일 여행 코스',
         imagePath: '/tmp/cover.png',
@@ -90,6 +92,7 @@ describe('App generator integration', () => {
 
     expect(await screen.findByText('글 생성이 완료되었습니다.')).toBeInTheDocument();
     expect(screen.getAllByText(/생성된 블로그 글/).length).toBeGreaterThan(0);
+    expect(screen.getByText('구분선 기준 2개 블록')).toBeInTheDocument();
     expect(screen.getByText('검색 출처 1건')).toBeInTheDocument();
   });
 

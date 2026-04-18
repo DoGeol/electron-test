@@ -16,10 +16,11 @@ const createDocument = (): ArticleDocument => ({
   blocks: [
     { id: 'h1', type: 'heading', content: { level: 1, text: '제목' }, order: 0 },
     { id: 'p1', type: 'paragraph', content: { text: '본문 문단' }, order: 1 },
-    { id: 'l1', type: 'list', content: { items: ['하나', '둘'] }, order: 2 },
-    { id: 'q1', type: 'quote', content: { text: '인용' }, order: 3 },
-    { id: 'c1', type: 'code', content: { language: 'ts', code: 'const x = 1;' }, order: 4 },
-    { id: 'i1', type: 'image', content: { alt: '샘플', url: 'https://example.com/image.png' }, order: 5 },
+    { id: 'd1', type: 'divider', content: {}, order: 2 },
+    { id: 'l1', type: 'list', content: { items: ['하나', '둘'] }, order: 3 },
+    { id: 'q1', type: 'quote', content: { text: '인용' }, order: 4 },
+    { id: 'c1', type: 'code', content: { language: 'ts', code: 'const x = 1;' }, order: 5 },
+    { id: 'i1', type: 'image', content: { alt: '샘플', url: 'https://example.com/image.png' }, order: 6 },
   ],
 });
 
@@ -37,6 +38,7 @@ describe('blocknote domain bridge', () => {
 
     expect(markdown).toContain('# 제목');
     expect(markdown).toContain('본문 문단');
+    expect(markdown).toContain('\n\n---\n\n');
     expect(markdown).toContain('```ts');
     expect(markdown).toContain('![샘플](https://example.com/image.png)');
   });

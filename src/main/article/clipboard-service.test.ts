@@ -19,13 +19,13 @@ describe('createClipboardService', () => {
       convertMarkdownToNaverHtml,
     });
 
-    const result = await service.copyNaver('# 제목\n\n본문');
+    const result = await service.copyNaver('# 제목\n\n*(사진 1)*\n\n본문\n\n***\n\n![사진](https://example.com/a.png)\n\n둘째 본문');
 
     expect(result).toEqual({ ok: true });
-    expect(convertMarkdownToNaverHtml).toHaveBeenCalledWith('# 제목\n\n본문');
+    expect(convertMarkdownToNaverHtml).toHaveBeenCalledWith('# 제목\n\n본문\n\n---\n\n둘째 본문');
     expect(clipboard.write).toHaveBeenCalledWith({
       html: '<p>본문</p>',
-      text: '# 제목\n\n본문',
+      text: '# 제목\n\n본문\n\n---\n\n둘째 본문',
     });
   });
 
@@ -42,9 +42,61 @@ describe('createClipboardService', () => {
       })),
     });
 
-    await service.copyMarkdown('# 제목\n\n본문');
+    await service.copyMarkdown('# 제목\n\n*사진 1*\n\n본문');
 
     expect(clipboard.writeText).toHaveBeenCalledWith('# 제목\n\n본문');
+  });
+
+  it('flattens italic html from naver clipboard payload', async () => {
+    const clipboard = {
+      write: vi.fn(),
+      writeText: vi.fn(),
+    };
+    const service = createClipboardService({
+      clipboard,
+      convertMarkdownToNaverHtml: vi.fn(() => ({
+        html: '<p><em style="font-style: italic;">기울임</em> 본문</p>',
+        fallback: false,
+      })),
+    });
+
+    await service.copyNaver('본문 *강조*');
+
+    expect(clipboard.write).toHaveBeenCalledWith({
+      html: '<p>기울임 본문</p>',
+      text: '본문 *강조*',
+    });
+  });
+
+  it('limits italic flattening to html tags and style attributes', async () => {
+    const clipboard = {
+      write: vi.fn(),
+      writeText: vi.fn(),
+    };
+    const service = createClipboardService({
+      clipboard,
+      convertMarkdownToNaverHtml: vi.fn(() => ({
+        html: [
+          '<p><em style="font-style: italic;">기울임</em></p>',
+          '<p><i>아이 태그</i></p>',
+          '<span style="font-style: italic; color: red;">스타일 본문</span>',
+          '<pre>font-style: italic;</pre>',
+        ].join(''),
+        fallback: false,
+      })),
+    });
+
+    await service.copyNaver('본문');
+
+    expect(clipboard.write).toHaveBeenCalledWith({
+      html: [
+        '<p>기울임</p>',
+        '<p>아이 태그</p>',
+        '<span style="color: red">스타일 본문</span>',
+        '<pre>font-style: italic;</pre>',
+      ].join(''),
+      text: '본문',
+    });
   });
 
   it('falls back to escaped pre html when converter throws', async () => {

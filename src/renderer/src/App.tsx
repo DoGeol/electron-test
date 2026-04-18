@@ -2,17 +2,30 @@ import {
   Copy,
   FileText,
   FolderOpen,
+  GripVertical,
   KeyRound,
   Link2,
   PenSquare,
   Save,
   Settings,
   Sparkles,
+  Trash2,
 } from 'lucide-react';
 import { BlockNoteViewRaw as BlockNoteView, useCreateBlockNote } from '@blocknote/react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { BridgeApi } from '../../preload/bridge';
 import { DEFAULT_PROMPT_MARKDOWN } from '../../shared/default-prompt';
+import {
+  type ArticleSection,
+  articleSectionsToMarkdown,
+  deleteSections,
+  normalizeMarkdownDividers,
+  moveSectionToIndex,
+  prepareMarkdownForCopy,
+  replaceSectionMarkdown,
+  splitMarkdownIntoSections,
+  updateSectionMarkdown,
+} from '../../shared/domain/section';
 import type { GroundingPayload } from '../../shared/ipc';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
@@ -26,6 +39,11 @@ const navItems: Array<{ key: Page; label: string; icon: typeof FileText }> = [
   { key: 'generator', label: '글 생성', icon: FileText },
   { key: 'settings', label: '설정', icon: Settings },
 ];
+
+function getSectionTitle(section: ArticleSection): string {
+  const headingMatch = /^#{1,6}\s+(.+)$/m.exec(section.markdown);
+  return headingMatch?.[1]?.trim() || `본문 블록 ${section.order + 1}`;
+}
 
 const FALLBACK_BRIDGE: BridgeApi = {
   settings: {
@@ -53,6 +71,9 @@ const FALLBACK_BRIDGE: BridgeApi = {
     copyMarkdown: async () => ({ ok: false }),
     copySelectionNaver: async () => ({ ok: false }),
   },
+  files: {
+    getPathForFile: (file: File) => (file as File & { path?: string }).path ?? '',
+  },
 };
 
 function resolveBridge(): BridgeApi {
@@ -64,6 +85,7 @@ export default function App() {
   const bridge = useMemo(() => resolveBridge(), []);
   const editor = useCreateBlockNote();
   const syncingEditorRef = useRef(false);
+  const lastSyncedSectionIdRef = useRef<string | null>(null);
   const settingsLoadRequestIdRef = useRef(0);
   const settingsEditVersionRef = useRef(0);
   const [page, setPage] = useState<Page>('generator');
@@ -76,14 +98,29 @@ export default function App() {
   const [apiKeyDirty, setApiKeyDirty] = useState(false);
   const [settingsNotice, setSettingsNotice] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
-  const [generatedMarkdown, setGeneratedMarkdown] = useState('');
+  const [articleSections, setArticleSections] = useState<ArticleSection[]>([]);
+  const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
+  const [selectedSectionIds, setSelectedSectionIds] = useState<string[]>([]);
+  const [draggedSectionId, setDraggedSectionId] = useState<string | null>(null);
+  const [dragOverSectionId, setDragOverSectionId] = useState<string | null>(null);
   const [generateNotice, setGenerateNotice] = useState('');
   const [groundingSummary, setGroundingSummary] = useState('');
   const [saveNotice, setSaveNotice] = useState('');
   const [copyNotice, setCopyNotice] = useState('');
   const [lastGrounding, setLastGrounding] = useState<GroundingPayload | undefined>(undefined);
 
-  const generateDisabled = useMemo(() => topic.trim().length === 0 || isGenerating, [isGenerating, topic]);
+  const hasUnreadableSelectedImage = imageName.length > 0 && !imagePath;
+  const generateDisabled = useMemo(
+    () => topic.trim().length === 0 || isGenerating || hasUnreadableSelectedImage,
+    [hasUnreadableSelectedImage, isGenerating, topic]
+  );
+  const activeSection = useMemo(
+    () => articleSections.find((section) => section.id === activeSectionId) ?? null,
+    [activeSectionId, articleSections]
+  );
+  const selectedSectionIdSet = useMemo(() => new Set(selectedSectionIds), [selectedSectionIds]);
+  const selectedSectionCount = selectedSectionIds.length;
+  const hasArticle = articleSections.length > 0;
   const pageTitle = page === 'generator' ? '블로그 글 생성' : '설정';
   const pageDescription =
     page === 'generator'
@@ -165,7 +202,11 @@ export default function App() {
         imagePath,
       });
 
-      setGeneratedMarkdown(result.markdown);
+      const sections = splitMarkdownIntoSections(result.markdown);
+      setArticleSections(sections);
+      setSelectedSectionIds([]);
+      lastSyncedSectionIdRef.current = null;
+      setActiveSectionId(null);
       setLastGrounding(result.grounding);
       const sourceCount = result.grounding?.sources.length ?? 0;
       setGroundingSummary(sourceCount > 0 ? `검색 출처 ${sourceCount}건` : '검색 출처 없음');
@@ -207,14 +248,106 @@ export default function App() {
       return;
     }
 
-    const markdown = editor.blocksToMarkdownLossy().trim();
-    setGeneratedMarkdown(markdown);
-  }, [editor]);
+    if (!activeSectionId) {
+      return;
+    }
+
+    const markdown = normalizeMarkdownDividers(editor.blocksToMarkdownLossy().trim());
+    setArticleSections((sections) => replaceSectionMarkdown(sections, activeSectionId, markdown));
+  }, [activeSectionId, editor]);
+
+  const commitActiveSection = useCallback((options: { deactivate?: boolean } = {}): ArticleSection[] => {
+    if (!activeSectionId) {
+      return articleSections;
+    }
+
+    const markdown = normalizeMarkdownDividers(editor.blocksToMarkdownLossy().trim());
+    const nextSections = updateSectionMarkdown(articleSections, activeSectionId, markdown);
+    setArticleSections(nextSections);
+    setSelectedSectionIds((sectionIds) => {
+      const nextSectionIds = new Set(nextSections.map((section) => section.id));
+      return sectionIds.filter((sectionId) => nextSectionIds.has(sectionId));
+    });
+    lastSyncedSectionIdRef.current = null;
+    if (options.deactivate || !nextSections.some((section) => section.id === activeSectionId)) {
+      setActiveSectionId(null);
+    }
+    return nextSections;
+  }, [activeSectionId, articleSections, editor]);
+
+  const handleToggleSectionSelected = useCallback((sectionId: string) => {
+    setSelectedSectionIds((sectionIds) =>
+      sectionIds.includes(sectionId) ? sectionIds.filter((selectedSectionId) => selectedSectionId !== sectionId) : [...sectionIds, sectionId]
+    );
+  }, []);
+
+  const handleActivateSection = useCallback(
+    (section: ArticleSection) => {
+      if (activeSectionId === section.id) {
+        return;
+      }
+
+      commitActiveSection();
+      lastSyncedSectionIdRef.current = null;
+      setActiveSectionId(section.id);
+    },
+    [activeSectionId, commitActiveSection]
+  );
+
+  const handleSectionDragStart = useCallback(
+    (event: DragEvent<HTMLButtonElement>, sectionId: string) => {
+      const nextSections = commitActiveSection({ deactivate: true });
+      if (!nextSections.some((section) => section.id === sectionId)) {
+        event.preventDefault();
+        return;
+      }
+
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', sectionId);
+      setDraggedSectionId(sectionId);
+    },
+    [commitActiveSection]
+  );
+
+  const handleSectionDragOver = useCallback((event: DragEvent<HTMLElement>, sectionId: string) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    setDragOverSectionId(sectionId);
+  }, []);
+
+  const handleSectionDragLeave = useCallback((event: DragEvent<HTMLElement>, sectionId: string) => {
+    const nextTarget = event.relatedTarget;
+    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
+      return;
+    }
+
+    setDragOverSectionId((currentSectionId) => (currentSectionId === sectionId ? null : currentSectionId));
+  }, []);
+
+  const handleSectionDrop = useCallback(
+    (event: DragEvent<HTMLElement>, targetSectionId: string) => {
+      event.preventDefault();
+      const sourceSectionId = draggedSectionId ?? event.dataTransfer.getData('text/plain');
+      setArticleSections((sections) => {
+        const targetIndex = sections.findIndex((section) => section.id === targetSectionId);
+        return moveSectionToIndex(sections, sourceSectionId, targetIndex);
+      });
+      setDraggedSectionId(null);
+      setDragOverSectionId(null);
+    },
+    [draggedSectionId]
+  );
+
+  const handleSectionDragEnd = useCallback(() => {
+    setDraggedSectionId(null);
+    setDragOverSectionId(null);
+  }, []);
 
   const handleSaveArticle = useCallback(async () => {
     setSaveNotice('');
 
-    const markdown = editor.blocksToMarkdownLossy().trim() || generatedMarkdown.trim();
+    const committedSections = commitActiveSection();
+    const markdown = articleSectionsToMarkdown(committedSections).trim();
     if (!markdown) {
       setSaveNotice('저장할 본문이 없습니다. 글을 생성하거나 편집해주세요.');
       return;
@@ -234,11 +367,12 @@ export default function App() {
       const message = error instanceof Error ? error.message : '저장에 실패했습니다.';
       setSaveNotice(message);
     }
-  }, [bridge, editor, generatedMarkdown, imagePath, lastGrounding, topic]);
+  }, [bridge, commitActiveSection, imagePath, lastGrounding, topic]);
 
   const handleCopyNaver = useCallback(async () => {
     setCopyNotice('');
-    const markdown = editor.blocksToMarkdownLossy().trim() || generatedMarkdown.trim();
+    const committedSections = commitActiveSection();
+    const markdown = prepareMarkdownForCopy(articleSectionsToMarkdown(committedSections));
     if (!markdown) {
       setCopyNotice('복사할 본문이 없습니다. 글을 생성하거나 편집해주세요.');
       return;
@@ -251,10 +385,34 @@ export default function App() {
       const message = error instanceof Error ? error.message : '네이버 복사에 실패했습니다.';
       setCopyNotice(message);
     }
-  }, [bridge, editor, generatedMarkdown]);
+  }, [bridge, commitActiveSection]);
 
-  const handleCopySelectionNaver = useCallback(async () => {
+  const handleCopySectionNaver = useCallback(async (section: ArticleSection) => {
     setCopyNotice('');
+    const committedSections = commitActiveSection();
+    const committedSection = committedSections.find((candidate) => candidate.id === section.id) ?? section;
+    const markdown = prepareMarkdownForCopy(committedSection.markdown);
+    if (!markdown) {
+      setCopyNotice('복사할 본문 블록이 비어 있습니다.');
+      return;
+    }
+
+    try {
+      await bridge.clipboard.copySelectionNaver(markdown);
+      setCopyNotice(`본문 블록 ${section.order + 1}번을 네이버 형식으로 복사했습니다.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '본문 블록 복사에 실패했습니다.';
+      setCopyNotice(message);
+    }
+  }, [bridge, commitActiveSection]);
+
+  const handleCopySelectedParagraphNaver = useCallback(async () => {
+    setCopyNotice('');
+
+    if (!activeSectionId) {
+      setCopyNotice('선택된 문단이 없습니다. 복사할 문단을 먼저 선택해주세요.');
+      return;
+    }
 
     const selection = editor.getSelection();
     if (!selection) {
@@ -262,11 +420,9 @@ export default function App() {
       return;
     }
 
-    const selectionBlocks = editor.getSelectionCutBlocks().blocks;
-    const markdown = editor
-      .blocksToMarkdownLossy(selectionBlocks as Parameters<typeof editor.blocksToMarkdownLossy>[0])
-      .trim();
-
+    const selectedBlocks = editor.getSelectionCutBlocks().blocks;
+    const selectedMarkdownBlocks = selectedBlocks as Parameters<typeof editor.blocksToMarkdownLossy>[0];
+    const markdown = prepareMarkdownForCopy(editor.blocksToMarkdownLossy(selectedMarkdownBlocks).trim());
     if (!markdown) {
       setCopyNotice('선택된 문단이 없습니다. 복사할 문단을 먼저 선택해주세요.');
       return;
@@ -279,11 +435,61 @@ export default function App() {
       const message = error instanceof Error ? error.message : '선택 문단 복사에 실패했습니다.';
       setCopyNotice(message);
     }
-  }, [bridge, editor]);
+  }, [activeSectionId, bridge, editor]);
+
+  const handleCopySelectedSectionsNaver = useCallback(async () => {
+    setCopyNotice('');
+
+    const committedSections = commitActiveSection();
+    const selectedIds = new Set(selectedSectionIds);
+    const selectedSections = committedSections.filter((section) => selectedIds.has(section.id));
+    if (selectedSections.length === 0) {
+      setCopyNotice('선택된 블록이 없습니다. 복사할 블록을 먼저 선택해주세요.');
+      return;
+    }
+
+    const markdown = prepareMarkdownForCopy(articleSectionsToMarkdown(selectedSections));
+    if (!markdown) {
+      setCopyNotice('선택한 블록에 복사할 본문이 없습니다.');
+      return;
+    }
+
+    try {
+      await bridge.clipboard.copySelectionNaver(markdown);
+      setCopyNotice('선택 블록을 네이버 형식으로 복사했습니다.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '선택 블록 복사에 실패했습니다.';
+      setCopyNotice(message);
+    }
+  }, [bridge, commitActiveSection, selectedSectionIds]);
+
+  const handleDeleteSelectedSections = useCallback(() => {
+    setSaveNotice('');
+    setCopyNotice('');
+
+    const committedSections = commitActiveSection({
+      deactivate: activeSectionId ? selectedSectionIds.includes(activeSectionId) : false,
+    });
+    const selectedIds = selectedSectionIds.filter((sectionId) => committedSections.some((section) => section.id === sectionId));
+    if (selectedIds.length === 0) {
+      setCopyNotice('선택된 블록이 없습니다. 삭제할 블록을 먼저 선택해주세요.');
+      return;
+    }
+
+    const nextSections = deleteSections(committedSections, selectedIds);
+    setArticleSections(nextSections);
+    setSelectedSectionIds([]);
+    if (activeSectionId && selectedIds.includes(activeSectionId)) {
+      setActiveSectionId(null);
+      lastSyncedSectionIdRef.current = null;
+    }
+    setSaveNotice('선택 블록을 삭제했습니다.');
+  }, [activeSectionId, commitActiveSection, selectedSectionIds]);
 
   const handleCopyMarkdown = useCallback(async () => {
     setCopyNotice('');
-    const markdown = editor.blocksToMarkdownLossy().trim() || generatedMarkdown.trim();
+    const committedSections = commitActiveSection();
+    const markdown = prepareMarkdownForCopy(articleSectionsToMarkdown(committedSections));
     if (!markdown) {
       setCopyNotice('복사할 본문이 없습니다. 글을 생성하거나 편집해주세요.');
       return;
@@ -291,12 +497,31 @@ export default function App() {
 
     try {
       await bridge.clipboard.copyMarkdown(markdown);
-      setCopyNotice('Markdown을 복사했습니다.');
+      setCopyNotice('마크다운을 복사했습니다.');
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Markdown 복사에 실패했습니다.';
+      const message = error instanceof Error ? error.message : '마크다운 복사에 실패했습니다.';
       setCopyNotice(message);
     }
-  }, [bridge, editor, generatedMarkdown]);
+  }, [bridge, commitActiveSection]);
+
+  const handleCopySectionMarkdown = useCallback(async (section: ArticleSection) => {
+    setCopyNotice('');
+    const committedSections = commitActiveSection();
+    const committedSection = committedSections.find((candidate) => candidate.id === section.id) ?? section;
+    const markdown = prepareMarkdownForCopy(committedSection.markdown);
+    if (!markdown) {
+      setCopyNotice('복사할 본문 블록이 비어 있습니다.');
+      return;
+    }
+
+    try {
+      await bridge.clipboard.copyMarkdown(markdown);
+      setCopyNotice(`본문 블록 ${section.order + 1}번 마크다운을 복사했습니다.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '본문 블록 마크다운 복사에 실패했습니다.';
+      setCopyNotice(message);
+    }
+  }, [bridge, commitActiveSection]);
 
   useEffect(() => {
     if (page === 'settings') {
@@ -305,10 +530,13 @@ export default function App() {
   }, [loadSettings, page]);
 
   useEffect(() => {
-    if (generatedMarkdown.trim().length > 0) {
-      syncEditorWithMarkdown(generatedMarkdown);
+    if (!activeSection || lastSyncedSectionIdRef.current === activeSection.id) {
+      return;
     }
-  }, [generatedMarkdown, syncEditorWithMarkdown]);
+
+    syncEditorWithMarkdown(activeSection.markdown);
+    lastSyncedSectionIdRef.current = activeSection.id;
+  }, [activeSection, syncEditorWithMarkdown]);
 
   return (
     <div className="h-full w-full bg-[var(--bg)] text-[var(--text)]">
@@ -379,12 +607,17 @@ export default function App() {
                       accept="image/png,image/jpeg,image/webp"
                       onChange={(event) => {
                         const file = event.target.files?.[0];
-                        const fileWithPath = file as (File & { path?: string }) | undefined;
+                        const resolvedImagePath = file ? bridge.files.getPathForFile(file).trim() : '';
                         setImageName(file ? file.name : '');
-                        setImagePath(fileWithPath?.path);
+                        setImagePath(resolvedImagePath || undefined);
+                        setGenerateNotice(
+                          file && !resolvedImagePath ? '이미지 파일 경로를 읽지 못했습니다. 다른 이미지 파일을 선택해주세요.' : ''
+                        );
                       }}
                     />
-                    <p className="text-xs text-[var(--text-muted)]">{imageName || 'PNG, JPG, WEBP 1장'}</p>
+                    <p className={`text-xs ${hasUnreadableSelectedImage ? 'text-[var(--error)]' : 'text-[var(--text-muted)]'}`}>
+                      {hasUnreadableSelectedImage ? '이미지 파일 경로를 읽지 못했습니다.' : imageName || 'PNG, JPG, WEBP 1장'}
+                    </p>
                   </div>
 
                   <div className="flex items-end">
@@ -403,16 +636,100 @@ export default function App() {
                 <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
                   <section className="overflow-hidden rounded-md border border-[var(--border)] bg-[var(--surface)]">
                     <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
-                      <h3 className="text-base font-semibold">생성된 글 본문</h3>
-                      <p className="text-xs text-[var(--text-muted)]">BlockNote 편집기</p>
+                      <div>
+                        <h3 className="text-base font-semibold">본문 블록</h3>
+                        <p className="mt-1 text-xs text-[var(--text-muted)]">
+                          {hasArticle ? `구분선 기준 ${articleSections.length}개 블록` : '생성된 본문 없음'}
+                        </p>
+                      </div>
                     </div>
-                    {generatedMarkdown ? (
-                      <article className="border-b border-[var(--border)] px-4 py-4">
-                        <pre className="whitespace-pre-wrap text-sm leading-6">{generatedMarkdown}</pre>
-                      </article>
-                    ) : null}
-                    <div className="p-4">
-                      <BlockNoteView editor={editor} onChange={handleEditorChange} />
+                    <div className="divide-y divide-[var(--border)]">
+                      {hasArticle ? (
+                        articleSections.map((section, index) => {
+                          const isEditing = activeSectionId === section.id;
+                          const isSelected = selectedSectionIdSet.has(section.id);
+                          const isDragging = draggedSectionId === section.id;
+                          const isDragOver = dragOverSectionId === section.id && draggedSectionId !== section.id;
+                          return (
+                            <article
+                              key={section.id}
+                              className={[
+                                'border-l-2 px-4 py-4 transition-colors',
+                                isEditing
+                                  ? 'border-[var(--accent)] bg-[var(--surface-2)]/60'
+                                  : isSelected
+                                    ? 'border-[var(--primary)] bg-[var(--surface-2)]/40'
+                                    : 'border-transparent',
+                                isDragOver ? 'bg-[var(--surface-2)] ring-1 ring-[var(--primary)]' : '',
+                                isDragging ? 'opacity-60' : '',
+                              ].join(' ')}
+                              onDragOver={(event) => handleSectionDragOver(event, section.id)}
+                              onDragLeave={(event) => handleSectionDragLeave(event, section.id)}
+                              onDrop={(event) => handleSectionDrop(event, section.id)}
+                            >
+                              <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div className="flex min-w-0 items-start gap-2">
+                                  <input
+                                    type="checkbox"
+                                    aria-label={`블록 ${index + 1} 선택`}
+                                    checked={isSelected}
+                                    onChange={() => handleToggleSectionSelected(section.id)}
+                                    className="mt-2 size-4 shrink-0 rounded-[3px] border border-[var(--border)] bg-[var(--bg)] accent-[var(--primary)]"
+                                  />
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="mt-0.5 shrink-0 cursor-grab text-[var(--text-muted)] active:cursor-grabbing"
+                                    draggable
+                                    aria-label={`블록 ${index + 1} 드래그 이동`}
+                                    onDragStart={(event) => handleSectionDragStart(event, section.id)}
+                                    onDragEnd={handleSectionDragEnd}
+                                  >
+                                    <GripVertical className="size-4" />
+                                  </Button>
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-medium text-[var(--accent)]">블록 {index + 1}</p>
+                                    <h4 className="mt-1 truncate text-sm font-semibold">{getSectionTitle(section)}</h4>
+                                  </div>
+                                </div>
+                                <div className="flex flex-wrap justify-end gap-2">
+                                  <Button size="sm" variant="secondary" onClick={() => handleCopySectionMarkdown(section)}>
+                                    <FileText className="size-4" />
+                                    마크다운 복사
+                                  </Button>
+                                  <Button size="sm" variant="secondary" onClick={() => handleCopySectionNaver(section)}>
+                                    <Copy className="size-4" />
+                                    네이버 복사
+                                  </Button>
+                                </div>
+                              </div>
+                              {isEditing ? (
+                                <div className="mt-4 rounded-md border border-[var(--border)] bg-[var(--bg)] p-3">
+                                  <BlockNoteView editor={editor} onChange={handleEditorChange} />
+                                </div>
+                              ) : (
+                                <pre
+                                  role="button"
+                                  tabIndex={0}
+                                  aria-label={`블록 ${index + 1} 편집`}
+                                  className="mt-4 max-h-72 cursor-text overflow-auto whitespace-pre-wrap rounded-md bg-[var(--bg)] p-3 font-mono text-xs leading-6 text-[var(--text)] outline-none transition-colors hover:bg-[#010409] focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
+                                  onClick={() => handleActivateSection(section)}
+                                  onKeyDown={(event) => {
+                                    if (event.key === 'Enter' || event.key === ' ') {
+                                      event.preventDefault();
+                                      handleActivateSection(section);
+                                    }
+                                  }}
+                                >
+                                  {section.markdown}
+                                </pre>
+                              )}
+                            </article>
+                          );
+                        })
+                      ) : (
+                        <div className="px-4 py-10 text-center text-sm text-[var(--text-muted)]">생성된 본문이 없습니다.</div>
+                      )}
                     </div>
                   </section>
 
@@ -422,14 +739,27 @@ export default function App() {
                       <Copy className="size-4" />
                       전체 글 네이버 복사
                     </Button>
-                    <Button variant="secondary" className="w-full justify-start" onClick={handleCopySelectionNaver}>
-                      <Copy className="size-4" />
-                      선택 문단 복사
-                    </Button>
                     <Button variant="secondary" className="w-full justify-start" onClick={handleCopyMarkdown}>
                       <FileText className="size-4" />
-                      Markdown 복사
+                      전체 마크다운 복사
                     </Button>
+                    <div className="space-y-2 border-t border-[var(--border)] pt-3">
+                      <p className="text-xs font-semibold text-[var(--text-muted)]">
+                        선택 작업{selectedSectionCount > 0 ? ` · ${selectedSectionCount}개 선택됨` : ''}
+                      </p>
+                      <Button variant="secondary" className="w-full justify-start" onClick={handleCopySelectedParagraphNaver}>
+                        <Copy className="size-4" />
+                        선택 문단 네이버 복사
+                      </Button>
+                      <Button variant="secondary" className="w-full justify-start" onClick={handleCopySelectedSectionsNaver}>
+                        <Copy className="size-4" />
+                        선택 블록 네이버 복사
+                      </Button>
+                      <Button variant="danger" className="w-full justify-start" onClick={handleDeleteSelectedSections}>
+                        <Trash2 className="size-4" />
+                        선택 블록 삭제
+                      </Button>
+                    </div>
                     <Button className="w-full justify-start" onClick={handleSaveArticle}>
                       <Save className="size-4" />
                       저장

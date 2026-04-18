@@ -52,6 +52,13 @@ function getMimeTypeFromPath(imagePath: string): 'image/png' | 'image/jpeg' | 'i
 
 function buildPrompt(topic: string, promptMarkdown: string, imagePath?: string): string {
   const imageContext = imagePath ? `참고 이미지 파일명: ${basename(imagePath)}` : '참고 이미지 없음';
+  const inputContext = [
+    '## 입력 정보',
+    `- 주제: ${topic}`,
+    `- 참고 이미지: ${imageContext}`,
+    '- 위 주제와 참고 이미지를 최우선 근거로 사용',
+    '- 주제와 이미지가 다르면 이미지에서 확인되는 제품명과 사용자가 입력한 주제를 함께 검토',
+  ].join('\n');
   const interpolated = interpolatePrompt(promptMarkdown, {
     topic,
     image_context: imageContext,
@@ -60,10 +67,13 @@ function buildPrompt(topic: string, promptMarkdown: string, imagePath?: string):
   });
 
   return [
+    inputContext,
+    '## 사용자 작성 지침',
     interpolated.trim(),
     '## 출력 제약',
     '- 반드시 Markdown 형식으로만 출력',
     '- HTML, JSON, 코드블록 래퍼를 추가하지 않음',
+    '- 본문 주요 구역 사이에는 단독 줄 --- 를 넣어 블록을 구분',
     '- 본문 내부에 Grounding 출처를 자동 삽입하지 않음',
   ].join('\n');
 }

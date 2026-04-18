@@ -1,6 +1,7 @@
 import { BlockNoteEditor, type PartialBlock } from '@blocknote/core';
 import type { ArticleDocument } from './article';
 import { articleDocumentToMarkdown } from './markdown';
+import { normalizeMarkdownDividers } from './section';
 
 export function articleDocumentToBlockNoteBlocks(document: ArticleDocument): PartialBlock[] {
   const editor = BlockNoteEditor.create();
@@ -10,5 +11,5 @@ export function articleDocumentToBlockNoteBlocks(document: ArticleDocument): Par
 
 export function blockNoteBlocksToMarkdown(blocks: PartialBlock[]): string {
   const editor = BlockNoteEditor.create();
-  return editor.blocksToMarkdownLossy(blocks).trim();
+  return normalizeMarkdownDividers(editor.blocksToMarkdownLossy(blocks).trim());
 }

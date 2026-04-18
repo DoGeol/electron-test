@@ -60,4 +60,12 @@ describe('markdown canonical conversion', () => {
 
     expect(normalizeMarkdown(secondCanonical)).toBe(normalizeMarkdown(firstCanonical));
   });
+
+  it('preserves divider blocks as canonical horizontal rules', () => {
+    const source = ['# 제목', '', '첫 블록', '', '***', '', '둘째 블록'].join('\n');
+    const document = markdownToArticleDocument(source);
+
+    expect(document.blocks.map((block) => block.type)).toEqual(['heading', 'paragraph', 'divider', 'paragraph']);
+    expect(articleDocumentToMarkdown(document)).toBe(['# 제목', '', '첫 블록', '', '---', '', '둘째 블록'].join('\n'));
+  });
 });

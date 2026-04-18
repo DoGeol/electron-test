@@ -60,6 +60,25 @@ describe('createGeneratorService', () => {
     expect(request.config?.tools).toEqual([{ googleSearch: {} }]);
     expect(request.contents[0]?.parts[0]?.text).toContain('제주 봄 여행 코스');
     expect(request.contents[0]?.parts[0]?.text).toContain('Markdown');
+    expect(request.contents[0]?.parts[0]?.text).toContain('단독 줄 ---');
+  });
+
+  it('injects topic and image context even when the saved prompt has no template tokens', async () => {
+    const { service, generateContent } = createService();
+
+    await service.generateArticle({
+      apiKey: 'AIza-valid-key',
+      topic: 'JVM 터치온 드라이기 사용 리뷰',
+      promptMarkdown: '제품 사진을 바탕으로 리뷰를 작성해줘.',
+      imagePath: '/tmp/touch-on.jpeg',
+    });
+
+    const request = generateContent.mock.calls[0]?.[0] as GenerateContentRequest;
+    const promptText = request.contents[0]?.parts[0]?.text ?? '';
+    expect(promptText).toContain('## 입력 정보');
+    expect(promptText).toContain('- 주제: JVM 터치온 드라이기 사용 리뷰');
+    expect(promptText).toContain('touch-on.jpeg');
+    expect(promptText).toContain('제품 사진을 바탕으로 리뷰를 작성해줘.');
   });
 
   it('converts one image to inlineData part and validates extension', async () => {

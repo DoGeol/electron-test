@@ -13,7 +13,7 @@ describe('createArticleSaveService', () => {
 
     const result = await service.saveArticle({
       outputPath: outputRoot,
-      markdown: '# 제주 2박 3일\n\n봄 여행 동선을 정리했습니다.',
+      markdown: '# 제주 2박 3일\n\n봄 여행 동선을 정리했습니다.\n\n***\n\n둘째 블록입니다.',
       metadata: {
         topic: '제주 2박 3일',
       },
@@ -27,6 +27,7 @@ describe('createArticleSaveService', () => {
 
     const markdown = readFileSync(join(result.path, 'article.md'), 'utf8');
     expect(markdown).toContain('# 제주 2박 3일');
+    expect(markdown).toContain('\n\n---\n\n둘째 블록입니다.');
 
     const metadata = JSON.parse(readFileSync(join(result.path, 'metadata.json'), 'utf8')) as Record<string, unknown>;
     expect(metadata.topic).toBe('제주 2박 3일');

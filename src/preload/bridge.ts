@@ -11,7 +11,15 @@ import {
 
 export type BridgeApi = ReturnType<typeof createBridgeApi>;
 
-export function createBridgeApi(ipcRenderer: Pick<IpcRenderer, 'invoke'>) {
+type FilePathResolver = {
+  getPathForFile: (file: File) => string;
+};
+
+function getLegacyFilePath(file: File): string {
+  return (file as File & { path?: string }).path ?? '';
+}
+
+export function createBridgeApi(ipcRenderer: Pick<IpcRenderer, 'invoke'>, filePathResolver?: FilePathResolver) {
   return {
     settings: {
       get: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGet) as Promise<SettingsPayload>,
@@ -31,6 +39,9 @@ export function createBridgeApi(ipcRenderer: Pick<IpcRenderer, 'invoke'>) {
       copyMarkdown: (markdown: string) => ipcRenderer.invoke(IPC_CHANNELS.articleCopyMarkdown, markdown) as Promise<{ ok: boolean }>,
       copySelectionNaver: (markdown: string) =>
         ipcRenderer.invoke(IPC_CHANNELS.articleCopySelectionNaver, markdown) as Promise<{ ok: boolean }>,
+    },
+    files: {
+      getPathForFile: (file: File) => filePathResolver?.getPathForFile(file) ?? getLegacyFilePath(file),
     },
   };
 }

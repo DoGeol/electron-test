@@ -1,4 +1,4 @@
-export type ArticleBlockType = 'heading' | 'paragraph' | 'list' | 'quote' | 'code' | 'image';
+export type ArticleBlockType = 'heading' | 'paragraph' | 'list' | 'quote' | 'code' | 'image' | 'divider';
 
 export type GroundingSource = {
   title: string;
@@ -42,7 +42,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isArticleBlockType(value: unknown): value is ArticleBlockType {
-  return value === 'heading' || value === 'paragraph' || value === 'list' || value === 'quote' || value === 'code' || value === 'image';
+  return value === 'heading' || value === 'paragraph' || value === 'list' || value === 'quote' || value === 'code' || value === 'image' || value === 'divider';
 }
 
 function isArticleBlock(value: unknown): value is ArticleBlock {
