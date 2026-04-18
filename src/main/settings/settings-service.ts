@@ -1,4 +1,5 @@
 import type { SettingsPayload, UpdateSettingsPayload } from '../../shared/ipc';
+import { DEFAULT_PROMPT_MARKDOWN, LEGACY_DEFAULT_PROMPT_MARKDOWN } from '../../shared/default-prompt';
 
 const STORE_KEYS = {
   apiKey: 'settings.apiKey',
@@ -6,7 +7,7 @@ const STORE_KEYS = {
   outputPath: 'settings.outputPath',
 } as const;
 
-export const DEFAULT_PROMPT_MARKDOWN = '## 출력 형식\n- Markdown만 반환\n- 제목, 본문, 태그 포함';
+export { DEFAULT_PROMPT_MARKDOWN, LEGACY_DEFAULT_PROMPT_MARKDOWN };
 
 type SettingsStore = {
   get: <T>(key: string) => T | undefined;
@@ -47,7 +48,10 @@ function isProbablyGeminiApiKey(key: string): boolean {
 
 export function createSettingsService({ store, logger }: SettingsServiceDeps) {
   const getRawApiKey = () => normalizeString(store.get<string>(STORE_KEYS.apiKey));
-  const getPromptMarkdown = () => normalizeString(store.get<string>(STORE_KEYS.promptMarkdown), DEFAULT_PROMPT_MARKDOWN);
+  const getPromptMarkdown = () => {
+    const storedPrompt = normalizeString(store.get<string>(STORE_KEYS.promptMarkdown), DEFAULT_PROMPT_MARKDOWN);
+    return storedPrompt === LEGACY_DEFAULT_PROMPT_MARKDOWN ? DEFAULT_PROMPT_MARKDOWN : storedPrompt;
+  };
   const getOutputPath = () => normalizeString(store.get<string>(STORE_KEYS.outputPath));
 
   return {

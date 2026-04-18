@@ -12,6 +12,7 @@ import {
 import { BlockNoteViewRaw as BlockNoteView, useCreateBlockNote } from '@blocknote/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { BridgeApi } from '../../preload/bridge';
+import { DEFAULT_PROMPT_MARKDOWN } from '../../shared/default-prompt';
 import type { GroundingPayload } from '../../shared/ipc';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
@@ -30,7 +31,7 @@ const FALLBACK_BRIDGE: BridgeApi = {
   settings: {
     get: async () => ({
       apiKeyMasked: '',
-      promptMarkdown: '## 출력 형식\n- Markdown만 반환\n- 제목, 본문, 태그 포함',
+      promptMarkdown: DEFAULT_PROMPT_MARKDOWN,
       outputPath: '',
     }),
     update: async () => {
@@ -70,7 +71,7 @@ export default function App() {
   const [imageName, setImageName] = useState('');
   const [imagePath, setImagePath] = useState<string | undefined>(undefined);
   const [apiKey, setApiKey] = useState('');
-  const [promptMarkdown, setPromptMarkdown] = useState('## 출력 형식\n- Markdown만 반환\n- 제목, 본문, 태그 포함');
+  const [promptMarkdown, setPromptMarkdown] = useState(DEFAULT_PROMPT_MARKDOWN);
   const [outputPath, setOutputPath] = useState('');
   const [apiKeyDirty, setApiKeyDirty] = useState(false);
   const [settingsNotice, setSettingsNotice] = useState('');

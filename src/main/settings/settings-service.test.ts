@@ -4,7 +4,7 @@ import { mkdtempSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { DEFAULT_PROMPT_MARKDOWN, createSettingsService } from './settings-service';
+import { DEFAULT_PROMPT_MARKDOWN, LEGACY_DEFAULT_PROMPT_MARKDOWN, createSettingsService } from './settings-service';
 
 type MemoryStore = {
   get: <T>(key: string) => T | undefined;
@@ -31,6 +31,16 @@ describe('createSettingsService', () => {
       promptMarkdown: DEFAULT_PROMPT_MARKDOWN,
       outputPath: '',
     });
+  });
+
+  it('shows the current default when the legacy default prompt is stored', () => {
+    const service = createSettingsService({
+      store: createMemoryStore({ 'settings.promptMarkdown': LEGACY_DEFAULT_PROMPT_MARKDOWN }),
+      logger: { info: vi.fn(), error: vi.fn() },
+    });
+    const settings = service.getSettings();
+
+    expect(settings.promptMarkdown).toBe(DEFAULT_PROMPT_MARKDOWN);
   });
 
   it('updates and persists settings with masked api key', () => {
